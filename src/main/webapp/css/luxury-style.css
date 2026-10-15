@@ -1,0 +1,182 @@
+/* AURA PRIVÉ - Ultra-Exclusive Minimalist Aesthetic */
+:root {
+  --bg-primary: #0a0a0a;
+  --bg-card: #121212;
+  --text-primary: #f5f5f7;
+  --text-muted: #8e8e93;
+  --gold-accent: #c5a059;
+  --gold-hover: #dfba73;
+  --border-subtle: #242424;
+  --font-heading: "Playfair Display", Georgia, serif;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+  overflow-x: hidden;
+}
+
+/* Navigation */
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2.5rem 8%;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.brand-logo {
+  font-family: var(--font-heading);
+  font-size: 1.5rem;
+  letter-spacing: 0.25em;
+  color: var(--gold-accent);
+  text-transform: uppercase;
+}
+
+.nav-links a {
+  color: var(--text-muted);
+  text-decoration: none;
+  margin-left: 2.5rem;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  transition: color 0.3s ease;
+}
+
+.nav-links a:hover {
+  color: var(--gold-accent);
+}
+
+/* Hero Section */
+.hero {
+  min-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 6rem 10%;
+}
+
+.badge-tag {
+  color: var(--gold-accent);
+  font-size: 0.75rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  margin-bottom: 1.5rem;
+}
+
+.hero h1 {
+  font-family: var(--font-heading);
+  font-size: 3.5rem;
+  font-weight: 400;
+  margin-bottom: 1.5rem;
+  line-height: 1.2;
+  max-width: 800px;
+}
+
+.hero p {
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  max-width: 580px;
+  margin-bottom: 2.5rem;
+  font-weight: 300;
+}
+
+.cta-button {
+  background: transparent;
+  color: var(--gold-accent);
+  border: 1px solid var(--gold-accent);
+  padding: 1rem 2.8rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.4s ease;
+  text-decoration: none;
+}
+
+.cta-button:hover {
+  background: var(--gold-accent);
+  color: var(--bg-primary);
+}
+
+/* Exclusive Offerings Grid */
+.curations {
+  padding: 5rem 8%;
+}
+
+.section-header {
+  text-align: center;
+  margin-bottom: 4rem;
+}
+
+.section-header h2 {
+  font-family: var(--font-heading);
+  font-size: 2rem;
+  font-weight: 400;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 2rem;
+}
+
+.card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  padding: 3rem 2rem;
+  transition: border-color 0.3s ease;
+}
+
+.card:hover {
+  border-color: var(--gold-accent);
+}
+
+.card h3 {
+  font-family: var(--font-heading);
+  color: var(--text-primary);
+  font-size: 1.3rem;
+  margin-bottom: 1rem;
+}
+
+.card p {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+
+/* Footer */
+footer {
+  text-align: center;
+  padding: 3rem 0;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.15em;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .hero h1 {
+    font-size: 2.2rem;
+  }
+  .navbar {
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .nav-links a {
+    margin: 0 0.8rem;
+  }
+}
