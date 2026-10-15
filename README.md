@@ -61,49 +61,49 @@ The system implements enterprise Java design patterns across the application sta
 AuraPrive-EventManagement/
 │
 ├── database/
-│ └── javapro.sql # Relational MariaDB schema & seed records
+│   └── javapro.sql                              # Relational MariaDB schema & seed records
 │
 ├── docs/
-│ ├── landing.png # Client portal preview
-│ ├── dashboard.png # Concierge terminal preview
-│ └── database_check.png # Terminal JDBC database verification view
+│   ├── landing.png                              # Client portal preview
+│   ├── dashboard.png                            # Concierge terminal preview
+│   └── database_check.png                       # Terminal JDBC database verification view
 │
 ├── lib/
-│ └── mysql-connector-j-8.3.0.jar # MySQL/MariaDB JDBC connector library
+│   └── mysql-connector-j-8.3.0.jar              # MySQL/MariaDB JDBC connector library
 │
 ├── src/
-│ └── main/
-│ ├── java/
-│ │ └── com/auraprive/
-│ │ ├── dao/
-│ │ │ ├── DatabaseConnection.java # Thread-safe JDBC Singleton manager
-│ │ │ └── EventDAO.java # Parameterized database CRUD operations
-│ │ ├── exception/
-│ │ │ └── ExclusiveAccessException.java # Custom security exception wrapper
-│ │ ├── model/
-│ │ │ ├── SecuredEntity.java # Access contract interface
-│ │ │ ├── Event.java # Abstract base domain entity
-│ │ │ ├── GalaEvent.java # Polymorphic implementation subclass
-│ │ │ └── VIPRegistry.java # Type-safe bounded Generic collection
-│ │ ├── service/
-│ │ │ └── DiscreetNotificationService.java # Synchronized multithreaded worker
-│ │ ├── servlet/
-│ │ │ └── EventServlet.java # Web request dispatcher and controller
-│ │ └── SystemVerification.java # Standalone evaluation runner & embedded server
-│ │
-│ └── webapp/
-│ ├── css/
-│ │ └── luxury-style.css # Obsidian & champagne-gold responsive UI
-│ ├── js/
-│ │ └── app.js # Client interactions
-│ ├── index.jsp # Client-facing bespoke entry portal
-│ ├── dashboard.jsp # Restricted concierge management interface
-│ └── WEB-INF/
-│ ├── web.xml # Deployment descriptor
-│ └── classes/ # Compiled JVM bytecodes (.class files)
+│   └── main/
+│       ├── java/
+│       │   └── com/auraprive/
+│       │       ├── dao/
+│       │       │   ├── DatabaseConnection.java  # Thread-safe JDBC Singleton manager
+│       │       │   └── EventDAO.java            # Parameterized database CRUD operations
+│       │       ├── exception/
+│       │       │   └── ExclusiveAccessException.java # Custom security exception wrapper
+│       │       ├── model/
+│       │       │   ├── SecuredEntity.java       # Access contract interface
+│       │       │   ├── Event.java               # Abstract base domain entity
+│       │       │   ├── GalaEvent.java           # Polymorphic implementation subclass
+│       │       │   └── VIPRegistry.java         # Type-safe bounded Generic collection
+│       │       ├── service/
+│       │       │   └── DiscreetNotificationService.java # Synchronized multithreaded worker
+│       │       ├── servlet/
+│       │       │   └── EventServlet.java        # Web request dispatcher and controller
+│       │       └── SystemVerification.java      # Standalone evaluation runner & embedded server
+│       │
+│       └── webapp/
+│           ├── css/
+│           │   └── luxury-style.css             # Obsidian & champagne-gold responsive UI
+│           ├── js/
+│           │   └── app.js                       # Client interactions
+│           ├── index.jsp                        # Client-facing bespoke entry portal
+│           ├── dashboard.jsp                    # Restricted concierge management interface
+│           └── WEB-INF/
+│               ├── web.xml                      # Deployment descriptor
+│               └── classes/                     # Compiled JVM bytecodes (.class files)
 │
-├── run-verification.bat # One-click compiler, rubric verifier & web launcher
-└── README.md # Architectural specification & execution guide
+├── run-verification.bat                         # One-click compiler, rubric verifier & web launcher
+└── README.md                                    # Architectural specification & execution guide
 
 ---
 
