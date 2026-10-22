@@ -1,12 +1,26 @@
-/* AURA PRIVÉ - Ultra-Exclusive Minimalist Aesthetic */
 :root {
-  --bg-primary: #0a0a0a;
-  --bg-card: #121212;
-  --text-primary: #f5f5f7;
-  --text-muted: #8e8e93;
-  --gold-accent: #c5a059;
-  --gold-hover: #dfba73;
-  --border-subtle: #242424;
+  /* 100% OKLCH Luxury Palette: Deep Obsidian Base + 24K Champagne Gold Glow */
+  --bg-obsidian: oklch(11% 0.01 260);
+  --bg-charcoal: oklch(14% 0.015 75);
+
+  /* Frosted Smoked-Glass Surfaces */
+  --bg-primary: oklch(13% 0.012 260 / 0.82);
+  --bg-secondary: oklch(16% 0.018 78 / 0.75);
+  --bg-card: oklch(16% 0.015 260 / 0.62);
+  --bg-card-hover: oklch(19% 0.025 80 / 0.72);
+
+  /* Crisp Ivory & Warm Champagne Typography */
+  --text-primary: oklch(96% 0.015 85);
+  --text-muted: oklch(72% 0.03 82);
+
+  /* True 24K Metallic Gold Accents */
+  --gold-accent: oklch(66.5% 0.12838 82.646);
+  --gold-hover: oklch(46.133% 0.06494 90.92);
+  --border-subtle: oklch(82% 0.12 85 / 0.22);
+  --border-strong: oklch(84% 0.15 85 / 0.55);
+  --danger-accent: oklch(66% 0.19 25);
+
+  /* Typography */
   --font-heading: "Playfair Display", Georgia, serif;
   --font-body: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
 }
@@ -17,166 +31,439 @@
   box-sizing: border-box;
 }
 
+/* Subtle 24K Gold Aurora Ribbons Floating Over Deep Obsidian */
 body {
-  background-color: var(--bg-primary);
+  background-color: var(--bg-obsidian);
+  background-image:
+    radial-gradient(
+      at 12% 15% in oklch,
+      oklch(78% 0.14 84 / 0.14) 0px,
+      transparent 48%
+    ),
+    radial-gradient(
+      at 88% 20% in oklch,
+      oklch(72% 0.12 70 / 0.12) 0px,
+      transparent 45%
+    ),
+    radial-gradient(
+      at 50% 85% in oklch,
+      oklch(80% 0.15 86 / 0.1) 0px,
+      transparent 55%
+    ),
+    linear-gradient(
+      160deg in oklch,
+      var(--bg-obsidian),
+      var(--bg-charcoal),
+      var(--bg-obsidian)
+    );
+  background-size: 200% 200%;
+  background-attachment: fixed;
+  animation: auroraGoldFlow 16s ease-in-out infinite alternate;
   color: var(--text-primary);
   font-family: var(--font-body);
-  line-height: 1.6;
-  letter-spacing: 0.02em;
-  overflow-x: hidden;
+  line-height: 1.65;
+  min-height: 100vh;
 }
 
-/* Navigation */
+@keyframes auroraGoldFlow {
+  0% {
+    background-position: 0% 20%;
+  }
+  50% {
+    background-position: 100% 80%;
+  }
+  100% {
+    background-position: 30% 100%;
+  }
+}
+
+/* Frosted Glassmorphism Navbar */
 .navbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 2.5rem 8%;
+  padding: 1.35rem 6%;
+  background: oklch(18% 0.04 75 / 0.55);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
   border-bottom: 1px solid var(--border-subtle);
+  box-shadow: 0 8px 32px oklch(8% 0.02 70 / 0.45);
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
 .brand-logo {
   font-family: var(--font-heading);
-  font-size: 1.5rem;
-  letter-spacing: 0.25em;
-  color: var(--gold-accent);
-  text-transform: uppercase;
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  background: linear-gradient(
+    90deg in oklch,
+    oklch(92% 0.11 88),
+    oklch(80% 0.16 82),
+    oklch(90% 0.12 86)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.nav-links {
+  display: flex;
+  gap: 2.2rem;
 }
 
 .nav-links a {
   color: var(--text-muted);
   text-decoration: none;
-  margin-left: 2.5rem;
-  font-size: 0.85rem;
+  font-size: 0.78rem;
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.15em;
-  transition: color 0.3s ease;
+  letter-spacing: 0.16em;
+  transition:
+    color 0.3s ease,
+    text-shadow 0.3s ease;
 }
 
 .nav-links a:hover {
-  color: var(--gold-accent);
+  color: var(--gold-hover);
+  text-shadow: 0 0 14px oklch(84% 0.15 84 / 0.45);
 }
 
 /* Hero Section */
 .hero {
-  min-height: 70vh;
+  min-height: 76vh;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
   text-align: center;
-  padding: 6rem 10%;
+  padding: 4rem 8%;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.hero-content {
+  max-width: 800px;
+  padding: 3.5rem 3rem;
+  background: oklch(20% 0.045 76 / 0.42);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  box-shadow:
+    0 24px 60px oklch(8% 0.02 70 / 0.55),
+    inset 0 1px 0 oklch(92% 0.1 86 / 0.25);
 }
 
 .badge-tag {
-  color: var(--gold-accent);
-  font-size: 0.75rem;
-  letter-spacing: 0.3em;
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
   text-transform: uppercase;
-  margin-bottom: 1.5rem;
+  letter-spacing: 0.24em;
+  color: var(--gold-accent);
+  margin-bottom: 1rem;
 }
 
 .hero h1 {
   font-family: var(--font-heading);
-  font-size: 3.5rem;
-  font-weight: 400;
-  margin-bottom: 1.5rem;
-  line-height: 1.2;
-  max-width: 800px;
+  font-size: clamp(2.4rem, 4.5vw, 3.8rem);
+  font-weight: 600;
+  line-height: 1.18;
+  background: linear-gradient(
+    135deg in oklch,
+    oklch(97% 0.03 88),
+    oklch(84% 0.15 84),
+    oklch(92% 0.09 82)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin-bottom: 1.4rem;
 }
 
 .hero p {
+  font-size: 1.02rem;
   color: var(--text-muted);
-  font-size: 1.1rem;
-  max-width: 580px;
-  margin-bottom: 2.5rem;
-  font-weight: 300;
+  max-width: 600px;
+  margin: 0 auto 2.4rem auto;
 }
 
+/* Liquid Metallic Gold Gradient Buttons */
 .cta-button {
-  background: transparent;
-  color: var(--gold-accent);
-  border: 1px solid var(--gold-accent);
-  padding: 1rem 2.8rem;
-  font-size: 0.8rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: all 0.4s ease;
+  display: inline-block;
+  padding: 0.95rem 2.3rem;
+  background: linear-gradient(
+    135deg in oklch,
+    oklch(78% 0.15 80),
+    oklch(88% 0.15 86),
+    oklch(74% 0.14 75)
+  );
+  background-size: 200% 200%;
+  color: oklch(15% 0.03 72);
+  border: 1px solid oklch(90% 0.14 86 / 0.65);
+  border-radius: 8px;
   text-decoration: none;
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  cursor: pointer;
+  box-shadow: 0 8px 25px oklch(78% 0.15 82 / 0.28);
+  transition: all 0.35s ease;
 }
 
 .cta-button:hover {
-  background: var(--gold-accent);
-  color: var(--bg-primary);
+  background-position: 100% 50%;
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px oklch(84% 0.16 84 / 0.45);
 }
 
-/* Exclusive Offerings Grid */
-.curations {
-  padding: 5rem 8%;
+/* Services & Glassmorphism Cards */
+.services-section {
+  padding: 5rem 6%;
 }
 
 .section-header {
   text-align: center;
-  margin-bottom: 4rem;
+  margin-bottom: 3.5rem;
 }
 
 .section-header h2 {
   font-family: var(--font-heading);
-  font-size: 2rem;
-  font-weight: 400;
+  font-size: 2.2rem;
+  color: var(--text-primary);
 }
 
-.card-grid {
+.cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 2rem;
 }
 
-.card {
-  background-color: var(--bg-card);
+.service-card,
+.form-box,
+.auth-card {
+  background: var(--bg-card);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
   border: 1px solid var(--border-subtle);
-  padding: 3rem 2rem;
-  transition: border-color 0.3s ease;
+  border-radius: 14px;
+  padding: 2.4rem 2rem;
+  box-shadow:
+    0 16px 40px oklch(8% 0.02 70 / 0.45),
+    inset 0 1px 0 oklch(92% 0.1 86 / 0.2);
+  transition:
+    transform 0.3s ease,
+    border-color 0.3s ease,
+    background 0.3s ease;
 }
 
-.card:hover {
-  border-color: var(--gold-accent);
+.service-card:hover {
+  transform: translateY(-5px);
+  background: var(--bg-card-hover);
+  border-color: var(--border-strong);
 }
 
-.card h3 {
+.card-number {
   font-family: var(--font-heading);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--gold-accent);
+  margin-bottom: 0.8rem;
+  display: block;
+}
+
+.service-card h3 {
+  font-family: var(--font-heading);
+  font-size: 1.35rem;
   color: var(--text-primary);
-  font-size: 1.3rem;
+  margin-bottom: 0.8rem;
+}
+
+.service-card p {
+  font-size: 0.92rem;
+  color: var(--text-muted);
+}
+
+/* Dashboard Glass Tables, Role Bar & Inputs */
+.dashboard-container {
+  padding: 2.5rem 6%;
+}
+
+.role-bar {
+  background: var(--bg-card);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 1.1rem 1.5rem;
+  margin-bottom: 2rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: 0 12px 32px oklch(8% 0.02 70 / 0.4);
+}
+
+.role-pill {
+  padding: 0.48rem 0.95rem;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-primary);
+  text-decoration: none;
+  background: oklch(16% 0.035 74 / 0.6);
+  transition: all 0.25s ease;
+}
+
+.role-pill:hover {
+  border-color: var(--gold-accent);
+  color: var(--gold-hover);
+}
+
+.role-pill.active {
+  background: linear-gradient(
+    135deg in oklch,
+    oklch(78% 0.15 80),
+    oklch(87% 0.15 86)
+  );
+  color: oklch(15% 0.03 72);
+  font-weight: 700;
+  border-color: var(--gold-hover);
+}
+
+.table-wrapper {
+  margin-top: 1.2rem;
+  overflow-x: auto;
+  border-radius: 14px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--bg-card);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+th,
+td {
+  padding: 1rem 1.2rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 0.88rem;
+}
+
+th {
+  color: var(--gold-accent);
+  background: oklch(16% 0.04 75 / 0.55);
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  font-weight: 600;
+}
+
+tr:hover td {
+  background: oklch(26% 0.055 78 / 0.35);
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 1.2rem;
+}
+
+.form-group {
   margin-bottom: 1rem;
 }
 
-.card p {
-  color: var(--text-muted);
-  font-size: 0.9rem;
-  line-height: 1.7;
+label {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--gold-accent);
+  font-weight: 600;
 }
 
-/* Footer */
+input,
+select {
+  width: 100%;
+  padding: 0.75rem;
+  background: oklch(14% 0.03 72 / 0.72);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-primary);
+  outline: none;
+  font-family: inherit;
+  transition:
+    border-color 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+input:focus,
+select:focus {
+  border-color: var(--gold-accent);
+  box-shadow: 0 0 12px oklch(83% 0.15 84 / 0.25);
+}
+
+.inline-form {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.btn-small {
+  padding: 0.45rem 0.8rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: oklch(28% 0.07 78 / 0.65);
+  color: var(--gold-hover);
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.25s ease;
+}
+
+.btn-small:hover {
+  background: var(--gold-accent);
+  color: oklch(15% 0.03 72);
+}
+
+.btn-danger {
+  background: oklch(22% 0.06 25 / 0.45);
+  border-color: var(--danger-accent);
+  color: var(--danger-accent);
+}
+
+.btn-danger:hover {
+  background: var(--danger-accent);
+  color: oklch(97% 0.01 85);
+}
+
+.sub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 2rem;
+  margin-top: 2.5rem;
+}
+
 footer {
   text-align: center;
-  padding: 3rem 0;
+  padding: 2.5rem 6%;
   border-top: 1px solid var(--border-subtle);
+  font-size: 0.78rem;
   color: var(--text-muted);
-  font-size: 0.75rem;
-  letter-spacing: 0.15em;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .hero h1 {
-    font-size: 2.2rem;
-  }
-  .navbar {
-    flex-direction: column;
-    gap: 1rem;
-  }
-  .nav-links a {
-    margin: 0 0.8rem;
-  }
+  background: oklch(15% 0.03 72 / 0.65);
+  backdrop-filter: blur(12px);
 }

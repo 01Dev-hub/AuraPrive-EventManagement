@@ -1,5 +1,6 @@
 package com.auraprive.model;
 
+import com.auraprive.exception.ExclusiveAccessException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -10,10 +11,14 @@ import java.util.List;
 public class VIPRegistry<T extends SecuredEntity> {
     private final List<T> registryList = new ArrayList<>();
 
-    public synchronized void register(T entity) {
-        if (entity != null && entity.verifyAccess()) {
-            registryList.add(entity);
+    public synchronized void register(T entity) throws ExclusiveAccessException {
+        if (entity == null || !entity.verifyAccess()) {
+            throw new ExclusiveAccessException("Entity rejected by VIPRegistry: Invalid security clearance contract.");
         }
+        if (entity instanceof Event) {
+            ((Event) entity).validatePayload();
+        }
+        registryList.add(entity);
     }
 
     public synchronized List<T> getAll() {
