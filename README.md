@@ -1,8 +1,8 @@
 # AURA PRIVÉ — Bespoke Private Event Management Platform
 
-Aura Privé is a private concierge and event curation platform. The system orchestrates zero-exposure gatherings, private island summits, and unlisted estate buyouts with an emphasis on privacy, bespoke logistics, and security protocols.
+Aura Privé is a private concierge and event curation platform engineered for ultra-high-net-worth individuals (UHNWIs). The system orchestrates zero-exposure royal galas, heritage palace buyouts, and closed-door diplomatic summits with an emphasis on privacy, bespoke logistics, and strict security protocols.
 
-The application is built on a Core Java backend, utilizing JDBC for relational database persistence, Apache Tomcat for web servlet execution, and a responsive luxury UI.
+The application is built on a Core Java backend, utilizing JDBC for relational database persistence, Java Servlets, Filters, and JSPs for web execution, and a responsive OKLCH glassmorphism UI.
 
 ---
 
@@ -26,31 +26,28 @@ The application is built on a Core Java backend, utilizing JDBC for relational d
 
 The system implements enterprise Java design patterns across the application stack:
 
-### Model-View-Controller (MVC) Architecture
+### Model-View-Controller (MVC) & Role-Based Security
 
-- **Model:** Encapsulates business logic, domain entities, and data validation rules.
-- **View:** Responsive JSPs (`index.jsp`, `dashboard.jsp`, `login.jsp`) styled with a minimalist 24K gold and obsidian visual theme.
-- **Controller:** `EventServlet.java` & `AuthServlet.java` inspect HTTP request verbs (`GET`, `POST`), coordinate DAO database operations, manage HTTP sessions, and forward data to views.
+- **Model:** Encapsulates business logic, domain entities (`Event`, `GalaEvent`, `SummitEvent`), and centralized server-side payload validation (`validatePayload()`).
+- **View:** Responsive JSPs (`index.jsp`, `login.jsp`, `dashboard.jsp`) with XSS output sanitization (`Event.escapeHtml()`) and an OKLCH 24K gold and obsidian glassmorphism theme.
+- **Controller & Security Filter:** `EventServlet.java`, `AuthServlet.java`, and `AuthFilter.java` (`@WebFilter("/events")`) enforce role-isolated HTTP sessions (`ADMIN`, `CLIENT`, `VENDOR`), handle dynamic account registration, and coordinate full CRUD database operations.
 
 ### Object-Oriented Design (OOP)
 
 - **Interfaces (`SecuredEntity.java`):** Defines formal clearance contracts enforcing verification across high-profile entities.
-- **Inheritance & Abstract Classes (`Event.java`):** A root abstraction encapsulating core event attributes (title, sanctuary venue, security level).
+- **Inheritance & Abstract Classes (`Event.java`):** A root abstraction encapsulating core event attributes, future/present date validation (`LocalDate`), and security clearance allow-lists.
 - **Polymorphism (`GalaEvent.java`, `SummitEvent.java`):** Specialized subclasses overriding `calculateBaseLogisticsFee()` to dynamically compute custom pricing based on event architecture and VIP volume.
-- **Exception Handling (`ExclusiveAccessException.java`):** Custom domain exceptions to intercept security breaches and invalid booking payloads cleanly.
+- **Exception Handling (`ExclusiveAccessException.java`):** Custom checked domain exception thrown and caught across `Event.validatePayload()`, `VIPRegistry.register()`, and `EventServlet`.
 
-### Collections & Generics
+### Collections, Generics & Concurrency
 
-- **Generic Registry (`VIPRegistry<T extends SecuredEntity>`):** Enforces compile-time type safety over Java Collections (`List<T>`). Restricts registry access strictly to entities fulfilling the `SecuredEntity` interface and provides thread-safe access to records.
-
-### Multithreading & Synchronization
-
-- **Asynchronous Service (`DiscreetNotificationService.java`):** Spawns dedicated background worker threads via an `ExecutorService` thread pool to simulate secure dispatch transmissions without blocking the primary HTTP request thread. Utilizes synchronized locks (`synchronized(lock)`) to maintain thread safety across concurrent requests.
+- **Generic Registry (`VIPRegistry<T extends SecuredEntity>`):** Enforces compile-time type safety over Java Collections (`List<T>`) and validates entities upon registration.
+- **Thread-Safe Simulator & Multithreading (`DiscreetNotificationService.java`):** Uses `Executors.newFixedThreadPool(3)` for non-blocking background dispatches with fine-grained `synchronized` state tracking, alongside `CopyOnWriteArrayList`, `ConcurrentHashMap`, and `AtomicInteger` ID sequences in `EventDAO`.
 
 ### Data Access Layer (JDBC & DAO)
 
-- **Singleton Connection Manager (`DatabaseConnection.java`):** Centralizes MariaDB connection pooling via JDBC drivers, preventing redundant connection overhead.
-- **Data Access Object (`EventDAO.java`):** Encapsulates CRUD logic using parameterized `PreparedStatement` queries to prevent SQL injection vulnerabilities, with automatic fallback simulation if the local database is offline[cite: 5].
+- **Singleton Connection Manager (`DatabaseConnection.java`):** Thread-safe shared JDBC connection manager reading credentials from environment variables (`DB_PASSWORD`).
+- **Data Access Object (`EventDAO.java`):** Encapsulates full CRUD logic (`INSERT`, `SELECT ... LEFT JOIN clients`, `UPDATE`, `DELETE`) using parameterized `PreparedStatement` queries across `exclusive_events`, `clients`, and `elite_vendors`.
 
 ---
 
@@ -60,7 +57,7 @@ The system implements enterprise Java design patterns across the application sta
 AuraPrive-EventManagement/
 │
 ├── database/
-│   └── javapro.sql                              # Relational MariaDB schema & seed records
+│   └── javapro.sql                              # Relational MariaDB schema & Indian seed records
 │
 ├── docs/
 │   ├── landing.png                              # Client portal preview
@@ -75,22 +72,23 @@ AuraPrive-EventManagement/
 │       ├── java/
 │       │   └── com/auraprive/
 │       │       ├── dao/
-│       │       │   ├── DatabaseConnection.java  # Thread-safe JDBC Singleton manager
-│       │       │   └── EventDAO.java            # Parameterized database CRUD operations
+│       │       │   ├── DatabaseConnection.java  # Thread-safe JDBC Singleton connection manager
+│       │       │   └── EventDAO.java            # Full CRUD & JOIN queries + concurrent fallback
 │       │       ├── exception/
 │       │       │   └── ExclusiveAccessException.java # Custom security exception wrapper
 │       │       ├── model/
 │       │       │   ├── SecuredEntity.java       # Access contract interface
-│       │       │   ├── Event.java               # Abstract base domain entity
-│       │       │   ├── GalaEvent.java           # Polymorphic implementation subclass
-│       │       │   ├── SummitEvent.java         # Second polymorphic subclass
+│       │       │   ├── Event.java               # Abstract base entity & centralized validator
+│       │       │   ├── GalaEvent.java           # Polymorphic implementation subclass 1
+│       │       │   ├── SummitEvent.java         # Polymorphic implementation subclass 2
 │       │       │   └── VIPRegistry.java         # Type-safe bounded Generic collection
 │       │       ├── service/
-│       │       │   └── DiscreetNotificationService.java # Thread-pool synchronized worker
+│       │       │   └── DiscreetNotificationService.java # ExecutorService thread-pool worker
 │       │       ├── servlet/
-│       │       │   ├── EventServlet.java        # Web request dispatcher and CRUD controller
-│       │       │   └── AuthServlet.java         # SHA-256 session & authentication controller
-│       │       └── SystemVerification.java      # Standalone evaluation runner & embedded server
+│       │       │   ├── AuthFilter.java          # @WebFilter protecting /events routes
+│       │       │   ├── AuthServlet.java         # Multi-role login, signup & password controller
+│       │       │   └── EventServlet.java        # Role-isolated CRUD controller
+│       │       └── SystemVerification.java      # Standalone rubric runner & cookie-session server
 │       │
 │       └── webapp/
 │           ├── css/
@@ -98,49 +96,68 @@ AuraPrive-EventManagement/
 │           ├── js/
 │           │   └── app.js                       # Client interactions
 │           ├── index.jsp                        # Client-facing bespoke entry portal
-│           ├── login.jsp                        # Secure role-based login & biometric reset gate
-│           ├── dashboard.jsp                    # Restricted concierge management interface
+│           ├── login.jsp                        # Role-based login, sign-up & password change gate
+│           ├── dashboard.jsp                    # Role-isolated concierge & client interface
 │           └── WEB-INF/
-│               ├── web.xml                      # Deployment descriptor
-│               └── classes/                     # Compiled JVM bytecodes (.class files)
+│               └── web.xml                      # Deployment descriptor
 │
 ├── run-verification.bat                         # One-click compiler, rubric verifier & web launcher
 └── README.md                                    # Architectural specification & execution guide
 ```
 
+---
+
 ## 4. Requirements, Setup & How to Run
 
-Prerequisites
-Java Development Kit (JDK): Version 11, 17, or 21+[cite: 5]
+### Prerequisites
 
-Database (Optional): MariaDB or MySQL Server on port 3306. (If MariaDB/MySQL is not installed on the device, the application automatically switches to Offline In-Memory Mode so all features and web pages still work).
+- **Java Development Kit (JDK):** Version 11, 17, or 21+
+- **Database (Optional):** MariaDB or MySQL Server on port `3306`. _(If `DB_PASSWORD` is not set or MariaDB/MySQL is not installed, the application automatically runs in **Thread-Safe Offline Simulator Mode** so all features work out of the box)._
 
-## 5. One-Click Launch (Windows)
+### One-Click Launch (Windows)
 
-Extract or clone the AuraPrive-EventManagement folder[cite: 5].
+1. Extract or clone the `AuraPrive-EventManagement` folder.
+2. Double-click **`run-verification.bat`**.
+3. The script compiles the source files into `out/`, runs the 5 backend rubric checks in the terminal, and opens **`http://localhost:8080/login.jsp`** in your browser.
 
-Double-click run-verification.bat[cite: 5].
+### Default Evaluator Test Accounts (Passcode: `123456` for all)
 
-The script will compile the code, run the 5 backend rubric checks in the terminal, and automatically open http://localhost:8080 in your browser[cite: 5].
+- **Admin / Developer Console:** `admin@pro.abc` (Full CRUD & multi-table administration across Events, Clients, and Vendors)
+- **Client Portal:** `client@pro.abc` (Isolated private bookings & engagement commissioning)
+- **Vendor Portal:** `ven@pro.abc` (Read-only logistics schedule with client identity anonymization)
 
-Click "Request Private Portfolio" (or visit http://localhost:8080/login.jsp) to sign in and access the Concierge Dashboard[cite: 5].
+### Manual Terminal Execution
 
-## 6. Default Evaluator Test Accounts (Passcode: 123456 for all)
+```bash
+mkdir out
+javac -encoding UTF-8 -d out -cp "lib/mysql-connector-j-8.3.0.jar;src/main/java" src/main/java/com/auraprive/exception/*.java src/main/java/com/auraprive/model/*.java src/main/java/com/auraprive/service/*.java src/main/java/com/auraprive/dao/*.java src/main/java/com/auraprive/SystemVerification.java
+java -cp "lib/mysql-connector-j-8.3.0.jar;out" com.auraprive.SystemVerification
+```
 
-Admin / Developer Console: admin@pro.abc (Full CRUD & multi-table access)
+### Real MariaDB / MySQL Database Setup
 
-Client Portal: client@pro.abc (Isolated private bookings)
+1. Import the schema and seed records:
+   ```bash
+   mysql -u root -p < database/javapro.sql
+   ```
+2. Set the `DB_PASSWORD` environment variable before launching `run-verification.bat`:
+   ```powershell
+   $env:DB_PASSWORD="your_mysql_root_password"
+   .\run-verification.bat
+   ```
 
-Vendor Portal: ven@pro.abc (Read-only logistics schedule)
+### Deploying to Apache Tomcat 9
 
-## 7. Manual Terminal Execution
+1. Compile the classes including the Servlets and Filter against Tomcat's `servlet-api.jar`:
+   ```powershell
+   mkdir src/main/webapp/WEB-INF/classes
+   javac -encoding UTF-8 -d src/main/webapp/WEB-INF/classes -cp "lib/mysql-connector-j-8.3.0.jar;$env:CATALINA_HOME/lib/servlet-api.jar;src/main/java" src/main/java/com/auraprive/exception/*.java src/main/java/com/auraprive/model/*.java src/main/java/com/auraprive/service/*.java src/main/java/com/auraprive/dao/*.java src/main/java/com/auraprive/servlet/*.java
+   ```
+2. Copy `lib/mysql-connector-j-8.3.0.jar` into `src/main/webapp/WEB-INF/lib/` and deploy `src/main/webapp` to `$CATALINA_HOME/webapps/auraprive`.
 
-Run the following commands from the project root directory:
+---
 
-# Compile Java source files with the included JDBC driver
+## 5. Known Limitations
 
-javac -cp "lib/mysql-connector-j-8.3.0.jar;src/main/java" src/main/java/com/auraprive/dao/EventDAO.java src/main/java/com/auraprive/SystemVerification.java
-
-# Run the System Verification Suite & Embedded Web Server
-
-java -cp "lib/mysql-connector-j-8.3.0.jar;src/main/java" com.auraprive.SystemVerification
+- **In-Memory Credential Store & Unsalted SHA-256:** User login accounts (`ACCOUNTS`) are held in a thread-safe `ConcurrentHashMap` seeded at startup and hashed with standard SHA-256 (`MessageDigest`) to avoid external third-party dependencies. Production deployments should persist account credentials in a dedicated database table using salted adaptive hashing (`BCrypt` or `Argon2`).
+- **Single Shared JDBC Connection:** `DatabaseConnection` maintains a single thread-safe shared JDBC `Connection` instance rather than a multi-connection pool (`HikariCP`).

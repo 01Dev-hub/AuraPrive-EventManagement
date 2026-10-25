@@ -5,13 +5,10 @@ pageEncoding="UTF-8"%>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AURA PRIVÉ | Bespoke Private Events</title>
+    <title>AURA PRIVÉ | Sovereign Event Architecture</title>
     <link rel="stylesheet" href="css/luxury-style.css" />
-    <!-- Google Fonts for refined typography -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap"
       rel="stylesheet"
     />
   </head>
@@ -19,54 +16,60 @@ pageEncoding="UTF-8"%>
     <nav class="navbar">
       <div class="brand-logo">AURA PRIVÉ</div>
       <div class="nav-links">
-        <a href="#services">Curations</a>
-        <a href="#security">Discretion</a>
-        <a href="#inquiry">Inquire</a>
+        <a href="#services">Bespoke Pillars</a>
+        <a href="events">Concierge Terminal</a>
+        <a href="login.jsp">Client / Vendor Access</a>
       </div>
     </nav>
 
     <header class="hero">
-      <span class="badge-tag">Private Circle Access</span>
-      <h1>Curated for the Select Few. Hidden from the Rest.</h1>
-      <p>
-        Bespoke architecture, private estate takeovers, and sovereign security
-        protocols designed for zero-exposure gatherings.
-      </p>
-      <a href="#inquiry" class="cta-button">Request Private Portfolio</a>
+      <div class="hero-content">
+        <span class="badge-tag">By Sovereign Invitation Only</span>
+        <h1>Architecting the Unseen.</h1>
+        <p>
+          From zero-airspace heritage palace buyouts in Udaipur to closed-door
+          diplomatic summits in Jodhpur, Aura Privé orchestrates gatherings
+          beyond the public ledger.
+        </p>
+        <a href="login.jsp" class="cta-button">Enter Private Access Gate</a>
+      </div>
     </header>
 
-    <section id="services" class="curations">
+    <section id="services" class="services-section">
       <div class="section-header">
-        <h2>Pillars of Execution</h2>
+        <span class="badge-tag">Operational Capabilities</span>
+        <h2>The Three Pillars of Discretion</h2>
       </div>
-      <div class="card-grid">
-        <div class="card">
-          <h3>Sovereign Seclusion</h3>
+      <div class="cards-grid">
+        <div class="service-card">
+          <span class="card-number">01 / SANCTUARY BUYOUTS</span>
+          <h3>Royal Palace Enclaves</h3>
           <p>
-            Private islands, unlisted heritage estates, and high-altitude
-            retreats vetted for extreme confidentiality and airspace privacy.
+            Complete acoustic, maritime, and airspace isolation across heritage
+            Indian palaces and private island estates.
           </p>
         </div>
-        <div class="card">
-          <h3>White-Glove Logistics</h3>
+        <div class="service-card">
+          <span class="card-number">02 / SOVEREIGN LOGISTICS</span>
+          <h3>Polymorphic Curation</h3>
           <p>
-            Asynchronous multi-tier asset tracking, private aviation
-            coordination, and discreet chauffeur routing handled silently.
+            Dynamic logistics modeling tailored to Royal Galas and Diplomatic
+            Summits with real-time clearance verification.
           </p>
         </div>
-        <div class="card">
-          <h3>Michelin Guild Curation</h3>
+        <div class="service-card">
+          <span class="card-number">03 / ZERO-TRUST TELEMETRY</span>
+          <h3>Encrypted Dispatch</h3>
           <p>
-            Exclusive on-site residency by world-renowned culinary masters,
-            tailored to client dietary and bespoke preferences.
+            Asynchronous thread-pooled concierge notifications and role-isolated
+            portals for UHNW Clients and Syndicate Vendors.
           </p>
         </div>
       </div>
     </section>
 
     <footer>
-      &copy; 2026 AURA PRIVÉ CONCIERGE. ALL RIGHTS RESERVED. PRIVATE ENCRYPTED
-      ACCESS.
+      <p>&copy; 2026 AURA PRIVÉ SOVEREIGN CONCIERGE. ALL RIGHTS RESERVED.</p>
     </footer>
   </body>
 </html>

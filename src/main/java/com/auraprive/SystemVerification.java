@@ -18,6 +18,7 @@ import java.net.BindException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -27,8 +28,13 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class SystemVerification {
+
+    // Per-browser HTTP session store keyed by AURA_SESSION_ID cookie: token -> [email, ROLE, entityId]
+    private static final Map<String, String[]> SESSIONS = new ConcurrentHashMap<>();
 
     public static void main(String[] args) throws Exception {
         System.out.println("==================================================");
@@ -44,8 +50,8 @@ public class SystemVerification {
         }
 
         System.out.println("[TEST 2] Verifying Polymorphism (GalaEvent vs SummitEvent) & ExclusiveAccessException...");
-        Event gala = new GalaEvent(1, "Udaipur Royal Solstice Gala", "Taj Lake Palace, Udaipur", "2026-12-31", "Maximum Discretion", 60);
-        Event summit = new SummitEvent(2, "Jodhpur Sovereign Founders Summit", "Umaid Bhawan Palace, Jodhpur", "2026-11-18", "Maximum Discretion", 40);
+        Event gala = new GalaEvent(1, 1, "Maharaja Vikramaditya Rathore", "Udaipur Royal Solstice Gala", "Taj Lake Palace, Udaipur", "2026-12-31", "Maximum Discretion", 60);
+        Event summit = new SummitEvent(2, 2, "Arundhati Devi Scindia", "Jodhpur Sovereign Founders Summit", "Umaid Bhawan Palace, Jodhpur", "2026-11-18", "Maximum Discretion", 40);
         System.out.println("-> Polymorphic Subclass 1 [" + gala.getEventType() + "]: $" + String.format("%,.2f", gala.calculateBaseLogisticsFee()));
         System.out.println("-> Polymorphic Subclass 2 [" + summit.getEventType() + "]: $" + String.format("%,.2f", summit.calculateBaseLogisticsFee()));
 
@@ -55,7 +61,7 @@ public class SystemVerification {
         registry.register(summit);
         System.out.println("-> Registered Valid Entities Count: " + registry.count());
         try {
-            Event invalidEvent = new GalaEvent(1, "X", "Unknown", "2026-12-31", "", 999);
+            Event invalidEvent = new GalaEvent(1, "X", "Unknown", "1999-01-01", "Hacker", 999);
             registry.register(invalidEvent);
         } catch (ExclusiveAccessException ex) {
             System.out.println("-> Verified ExclusiveAccessException Thrown & Caught: " + ex.getMessage() + "\n");
@@ -65,7 +71,7 @@ public class SystemVerification {
         DiscreetNotificationService.sendEncryptedDispatch(gala.getEventTitle(), "board@auraprive.in");
         DiscreetNotificationService.sendEncryptedDispatch(summit.getEventTitle(), "syndicate@auraprive.in");
 
-        System.out.println("\n[TEST 5] Verifying Multi-Table DAO Queries (Events, Clients, Elite Vendors)...");
+        System.out.println("\n[TEST 5] Verifying Multi-Table DAO Queries (Events + JOIN Clients, Elite Vendors)...");
         EventDAO dao = new EventDAO();
         System.out.println("-> Active Events: " + dao.getAllEvents().size()
                 + " | Registered Clients: " + dao.getAllClients().size()
@@ -78,29 +84,24 @@ public class SystemVerification {
         startEmbeddedWebServer(dao);
     }
 
-    // Stores email -> [SHA-256 password hash, ROLE, linkedEntityId]
-    private static final Map<String, String[]> ACCOUNTS = new HashMap<>();
-    private static String activeSessionEmail = null;
-    private static String activeSessionRole = null;
-    private static int activeSessionEntityId = 1;
-
-    static {
-        String defaultHash = sha256("123456");
-        ACCOUNTS.put("admin@pro.abc", new String[]{defaultHash, "ADMIN", "0"});
-        ACCOUNTS.put("client@pro.abc", new String[]{defaultHash, "CLIENT", "1"});
-        ACCOUNTS.put("ven@pro.abc", new String[]{defaultHash, "VENDOR", "1"});
+    private static String getSessionToken(HttpExchange exchange) {
+        List<String> cookies = exchange.getRequestHeaders().get("Cookie");
+        if (cookies != null) {
+            for (String header : cookies) {
+                for (String part : header.split(";")) {
+                    String[] kv = part.trim().split("=", 2);
+                    if (kv.length == 2 && "AURA_SESSION_ID".equals(kv[0])) {
+                        return kv[1].trim();
+                    }
+                }
+            }
+        }
+        return null;
     }
 
-    private static String sha256(String input) {
-        try {
-            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
-            byte[] hash = md.digest(input.getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder();
-            for (byte b : hash) sb.append(String.format("%02x", b));
-            return sb.toString();
-        } catch (Exception e) {
-            return input;
-        }
+    private static String[] getActiveSession(HttpExchange exchange) {
+        String token = getSessionToken(exchange);
+        return (token != null) ? SESSIONS.get(token) : null;
     }
 
     private static void startEmbeddedWebServer(EventDAO eventDAO) throws IOException {
@@ -123,96 +124,79 @@ public class SystemVerification {
                 if (path.equals("/") || path.equals("/index.jsp")) {
                     String html = Files.readString(webappDir.resolve("index.jsp"), StandardCharsets.UTF_8);
                     html = html.replaceAll("<%@[^>]*%>", "");
-                    html = html.replace("href=\"#inquiry\"", "href=\"/login.jsp\"");
-                    html = html.replace("href=\"#security\"", "href=\"/login.jsp\"");
-                    html = html.replace("href=\"#services\"", "href=\"/login.jsp\"");
                     sendResponse(exchange, 200, "text/html; charset=UTF-8", html.getBytes(StandardCharsets.UTF_8));
                 } else if (path.equals("/login.jsp") || path.equals("/auth")) {
                     if ("logout".equalsIgnoreCase(query.get("action"))) {
-                        activeSessionEmail = null;
-                        activeSessionRole = null;
-                        exchange.getResponseHeaders().set("Location", "/login.jsp");
+                        String token = getSessionToken(exchange);
+                        if (token != null) SESSIONS.remove(token);
+                        exchange.getResponseHeaders().add("Set-Cookie", "AURA_SESSION_ID=; Path=/; Max-Age=0; HttpOnly");
+                        exchange.getResponseHeaders().set("Location", "/login.jsp?msg=Session+signed+out+cleanly.");
                         exchange.sendResponseHeaders(303, -1);
                         exchange.close();
                         return;
                     }
-                   if ("POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    if ("POST".equalsIgnoreCase(exchange.getRequestMethod())) {
                         String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
                         Map<String, String> params = parseFormParams(body);
                         String action = params.getOrDefault("action", "login");
                         String email = params.getOrDefault("email", "").trim().toLowerCase();
 
-                        // 1. Handle New Account Sign Up (Client or Vendor)
+                        // 1. Dynamic Sign-Up
                         if ("signup".equalsIgnoreCase(action)) {
-                            String role = params.getOrDefault("role", "CLIENT").toUpperCase();
-                            String fullName = params.getOrDefault("fullName", "Sovereign Member").trim();
+                            String role = "VENDOR".equalsIgnoreCase(params.get("role")) ? "VENDOR" : "CLIENT";
+                            String fullName = params.getOrDefault("fullName", "").trim();
                             String pass = params.getOrDefault("password", "");
                             String confirm = params.getOrDefault("confirmPassword", "");
 
-                            if (email.isEmpty() || pass.length() < 6 || !pass.equals(confirm)) {
-                                exchange.getResponseHeaders().set("Location", "/login.jsp?err=Sign+up+failed:+Check+email+and+matching+6-digit+passcode.");
-                            } else if (ACCOUNTS.containsKey(email)) {
-                                exchange.getResponseHeaders().set("Location", "/login.jsp?err=Account+already+exists+for+" + email + ".+Please+Log+In.");
+                            if (email.isEmpty() || fullName.isEmpty() || pass.length() < 6 || !pass.equals(confirm)) {
+                                exchange.getResponseHeaders().set("Location", "/login.jsp?err=Sign+up+failed:+Verify+name,+email,+and+matching+6-character+passcode.");
+                            } else if (EventDAO.accountExists(email)) {
+                                exchange.getResponseHeaders().set("Location", "/login.jsp?err=Account+already+exists+for+" + URLEncoder.encode(email, StandardCharsets.UTF_8));
                             } else {
-                                int entityId = 1;
-                                if ("VENDOR".equals(role)) {
-                                    String specialty = params.getOrDefault("specialty", "Bespoke Sovereign Logistics");
-                                    eventDAO.insertVendor(fullName, specialty, "Maximum Discretion");
-                                    entityId = eventDAO.getAllVendors().size();
+                                int entityId = "VENDOR".equals(role)
+                                        ? eventDAO.insertVendor(fullName, params.getOrDefault("specialty", "Bespoke Sovereign Logistics"), "Maximum Discretion")
+                                        : eventDAO.insertClient(fullName, params.getOrDefault("membershipTier", "Sovereign Founders Circle"), email);
+
+                                if (entityId < 1) {
+                                    exchange.getResponseHeaders().set("Location", "/login.jsp?err=Database+error+creating+account.");
                                 } else {
-                                    String tier = params.getOrDefault("membershipTier", "Sovereign Founders Circle");
-                                    eventDAO.insertClient(fullName, tier, email);
-                                    entityId = eventDAO.getAllClients().size();
+                                    EventDAO.registerAccountCredentials(email, pass, role, entityId);
+                                    String token = UUID.randomUUID().toString();
+                                    SESSIONS.put(token, new String[]{email, role, String.valueOf(entityId)});
+                                    exchange.getResponseHeaders().add("Set-Cookie", "AURA_SESSION_ID=" + token + "; Path=/; HttpOnly");
+                                    DiscreetNotificationService.sendEncryptedDispatch("New " + role + " Account Registered", email);
+                                    exchange.getResponseHeaders().set("Location", "/events");
                                 }
-                                ACCOUNTS.put(email, new String[]{sha256(pass), role, String.valueOf(entityId)});
-                                activeSessionEmail = email;
-                                activeSessionRole = role;
-                                activeSessionEntityId = entityId;
-                                DiscreetNotificationService.sendEncryptedDispatch("New " + role + " Account Registered", email);
-                                exchange.getResponseHeaders().set("Location", "/events");
                             }
                             exchange.sendResponseHeaders(303, -1);
                             exchange.close();
                             return;
                         }
 
-                        // 2. Handle Password Reset (Old Password Mode OR Biometric Face/Fingerprint Mode)
+                        // 2. Verified Password Change (Requires valid old password — no forged token bypass)
                         if ("resetPassword".equalsIgnoreCase(action)) {
-                            String resetMode = params.getOrDefault("resetMode", "OLD");
                             String oldPass = params.getOrDefault("oldPassword", "");
-                            String bioToken = params.getOrDefault("biometricToken", "NONE");
                             String newPass = params.getOrDefault("newPassword", "");
                             String confirmPass = params.getOrDefault("confirmPassword", "");
-                            String[] acc = ACCOUNTS.get(email);
 
-                            boolean identityVerified = false;
-                            if (acc != null) {
-                                if ("BIOMETRIC".equalsIgnoreCase(resetMode) && "VERIFIED".equalsIgnoreCase(bioToken)) {
-                                    identityVerified = true;
-                                } else if (acc[0].equals(sha256(oldPass))) {
-                                    identityVerified = true;
-                                }
-                            }
-
-                            if (identityVerified && newPass.equals(confirmPass) && newPass.length() >= 6) {
-                                acc[0] = sha256(newPass);
-                                DiscreetNotificationService.sendEncryptedDispatch("Password Reset Completed", email);
+                            if (newPass.equals(confirmPass) && EventDAO.updatePassword(email, oldPass, newPass)) {
+                                DiscreetNotificationService.sendEncryptedDispatch("Password Updated", email);
                                 exchange.getResponseHeaders().set("Location", "/login.jsp?msg=Password+updated+successfully.+Please+Log+In.");
                             } else {
-                                exchange.getResponseHeaders().set("Location", "/login.jsp?err=Reset+failed:+Invalid+email,+old+password,+or+biometric+verification.");
+                                exchange.getResponseHeaders().set("Location", "/login.jsp?err=Password+change+failed:+Invalid+email+or+current+password.");
                             }
                             exchange.sendResponseHeaders(303, -1);
                             exchange.close();
                             return;
                         }
 
-                        // 3. Handle Standard Log In
+                        // 3. Standard Login
                         String password = params.getOrDefault("password", "");
-                        String[] acc = ACCOUNTS.get(email);
-                        if (acc != null && acc[0].equals(sha256(password))) {
-                            activeSessionEmail = email;
-                            activeSessionRole = acc[1];
-                            activeSessionEntityId = Integer.parseInt(acc[2]);
+                        String[] acc = EventDAO.authenticateAccount(email, password);
+                        if (acc != null) {
+                            String token = UUID.randomUUID().toString();
+                            SESSIONS.put(token, new String[]{email, acc[1], acc[2]});
+                            exchange.getResponseHeaders().add("Set-Cookie", "AURA_SESSION_ID=" + token + "; Path=/; HttpOnly");
                             exchange.getResponseHeaders().set("Location", "/events");
                         } else {
                             exchange.getResponseHeaders().set("Location", "/login.jsp?err=Invalid+Email+or+Passcode.+Access+Denied.");
@@ -223,14 +207,14 @@ public class SystemVerification {
                     }
 
                     String html = Files.readString(webappDir.resolve("login.jsp"), StandardCharsets.UTF_8);
-                    html = html.replaceAll("<%@[^>]*%>", "");
+                    html = html.replaceAll("<%@[^>]*%>", "").replaceAll("(?s)<%.*?%>", "");
                     String banner = "";
                     if (query.containsKey("err")) {
                         banner = "<div style='padding:0.85rem;margin-bottom:1.2rem;border:1px solid var(--danger-accent);color:var(--danger-accent);border-radius:8px;font-size:0.84rem;'>" + Event.escapeHtml(query.get("err")) + "</div>";
                     } else if (query.containsKey("msg")) {
                         banner = "<div style='padding:0.85rem;margin-bottom:1.2rem;border:1px solid var(--gold-accent);color:var(--gold-accent);border-radius:8px;font-size:0.84rem;'>" + Event.escapeHtml(query.get("msg")) + "</div>";
                     }
-                    html = html.replace("<form action=\"auth\" method=\"POST\">", banner + "<form action=\"auth\" method=\"POST\">");
+                    html = html.replace("<div class=\"tab-bar\">", banner + "<div class=\"tab-bar\">");
                     sendResponse(exchange, 200, "text/html; charset=UTF-8", html.getBytes(StandardCharsets.UTF_8));
                 } else if (path.endsWith(".css")) {
                     byte[] bytes = Files.readAllBytes(webappDir.resolve(path.substring(1)));
@@ -248,13 +232,17 @@ public class SystemVerification {
 
         server.createContext("/events", exchange -> {
             try {
-                // Require authenticated session; redirect unauthenticated visitors to login.jsp
-                if (activeSessionRole == null) {
+                String[] session = getActiveSession(exchange);
+                if (session == null) {
                     exchange.getResponseHeaders().set("Location", "/login.jsp?err=Please+sign+in+to+access+your+portal.");
                     exchange.sendResponseHeaders(303, -1);
                     exchange.close();
                     return;
                 }
+
+                String sessionEmail = session[0];
+                String sessionRole = session[1];
+                int sessionEntityId = Integer.parseInt(session[2]);
 
                 Map<String, String> query = parseFormParams(exchange.getRequestURI().getRawQuery());
                 String tab = query.getOrDefault("tab", "events");
@@ -264,58 +252,89 @@ public class SystemVerification {
                     Map<String, String> params = parseFormParams(body);
                     String action = params.getOrDefault("action", "create");
 
-                    if ("delete".equalsIgnoreCase(action) && !"VENDOR".equals(activeSessionRole)) {
-                        int eventId = Integer.parseInt(params.getOrDefault("eventId", "0"));
-                        eventDAO.deleteEvent(eventId);
-                    } else if ("update".equalsIgnoreCase(action) && !"VENDOR".equals(activeSessionRole)) {
-                        int eventId = Integer.parseInt(params.getOrDefault("eventId", "0"));
-                        String security = params.getOrDefault("security", "Maximum Discretion");
-                        int guests = Integer.parseInt(params.getOrDefault("vipGuests", "50"));
-                        eventDAO.updateEvent(eventId, security, guests);
-                    } else if ("registerClient".equalsIgnoreCase(action) && "ADMIN".equals(activeSessionRole)) {
-                        String fullName = params.getOrDefault("fullName", "New Sovereign Client");
-                        String tier = params.getOrDefault("membershipTier", "Sovereign Founders Circle");
-                        String contact = params.getOrDefault("encryptedContact", "client@vault.auraprive.in").trim().toLowerCase();
-                        eventDAO.insertClient(fullName, tier, contact);
-                        int newId = eventDAO.getAllClients().size();
-                        ACCOUNTS.put(contact, new String[]{sha256("123456"), "CLIENT", String.valueOf(newId)});
-                        tab = "clients";
-                    } else if ("registerVendor".equalsIgnoreCase(action) && "ADMIN".equals(activeSessionRole)) {
-                        String vendorName = params.getOrDefault("vendorName", "New Syndicate Partner");
-                        String specialty = params.getOrDefault("specialty", "Bespoke Security");
-                        String clearance = params.getOrDefault("securityClearance", "Maximum Discretion");
-                        eventDAO.insertVendor(vendorName, specialty, clearance);
-                        tab = "vendors";
-                    } else if ("create".equalsIgnoreCase(action) && !"VENDOR".equals(activeSessionRole)) {
-                        int clientId = "CLIENT".equals(activeSessionRole)
-                                ? activeSessionEntityId
-                                : Integer.parseInt(params.getOrDefault("clientId", "1"));
-                        String title = params.getOrDefault("title", "Untitled Engagement");
-                        String type = params.getOrDefault("eventType", "GALA");
-                        String venue = params.getOrDefault("venue", "Private Sanctuary");
-                        String date = params.getOrDefault("date", "2026-12-31");
-                        String security = params.getOrDefault("security", "Maximum Discretion");
-                        int guests = Integer.parseInt(params.getOrDefault("vipGuests", "60"));
-
-                        Event newEvent = "SUMMIT".equalsIgnoreCase(type)
-                                ? new SummitEvent(clientId, title, venue, date, security, guests)
-                                : new GalaEvent(clientId, title, venue, date, security, guests);
-
-                        VIPRegistry<Event> reg = new VIPRegistry<>();
-                        reg.register(newEvent);
-                        if (eventDAO.insertEvent(newEvent)) {
-                            DiscreetNotificationService.sendEncryptedDispatch(title, activeSessionEmail);
+                    try {
+                        if ("VENDOR".equalsIgnoreCase(sessionRole)) {
+                            throw new ExclusiveAccessException("Vendor accounts have read-only logistics access.");
                         }
-                    }
 
-                    exchange.getResponseHeaders().set("Location", "/events?tab=" + tab);
-                    exchange.sendResponseHeaders(303, -1);
-                    exchange.close();
+                        if ("delete".equalsIgnoreCase(action)) {
+                            int eventId = Integer.parseInt(params.getOrDefault("eventId", "0"));
+                            if (!eventDAO.deleteEvent(eventId)) {
+                                throw new ExclusiveAccessException("Unable to delete engagement #" + eventId + " (not found).");
+                            }
+                        } else if ("update".equalsIgnoreCase(action)) {
+                            int eventId = Integer.parseInt(params.getOrDefault("eventId", "0"));
+                            String security = params.getOrDefault("security", "");
+                            int guests = Integer.parseInt(params.getOrDefault("vipGuests", "0"));
+                            if (!Event.isValidClearance(security)) {
+                                throw new ExclusiveAccessException("Unauthorized security clearance '" + security + "'.");
+                            }
+                            if (guests < 1 || guests > 500) {
+                                throw new ExclusiveAccessException("VIP guest count (" + guests + ") must be between 1 and 500.");
+                            }
+                            if (!eventDAO.updateEvent(eventId, security, guests)) {
+                                throw new ExclusiveAccessException("Failed to update engagement #" + eventId + ".");
+                            }
+                        } else if ("registerClient".equalsIgnoreCase(action) && "ADMIN".equals(sessionRole)) {
+                            String fullName = params.getOrDefault("fullName", "").trim();
+                            String tier = params.getOrDefault("membershipTier", "Sovereign Founders Circle");
+                            String contact = params.getOrDefault("encryptedContact", "").trim().toLowerCase();
+                            int newId = eventDAO.insertClient(fullName, tier, contact);
+                            if (newId < 1) {
+                                throw new ExclusiveAccessException("Failed to onboard client. Verify name and email.");
+                            }
+                            EventDAO.registerAccountCredentials(contact, "123456", "CLIENT", newId);
+                            tab = "clients";
+                        } else if ("registerVendor".equalsIgnoreCase(action) && "ADMIN".equals(sessionRole)) {
+                            String vendorName = params.getOrDefault("vendorName", "").trim();
+                            String specialty = params.getOrDefault("specialty", "").trim();
+                            String clearance = params.getOrDefault("securityClearance", "");
+                            if (eventDAO.insertVendor(vendorName, specialty, clearance) < 1) {
+                                throw new ExclusiveAccessException("Failed to accredit vendor. Verify clearance protocol.");
+                            }
+                            tab = "vendors";
+                        } else if ("create".equalsIgnoreCase(action)) {
+                            int clientId = "CLIENT".equals(sessionRole)
+                                    ? sessionEntityId
+                                    : Integer.parseInt(params.getOrDefault("clientId", "1"));
+                            if (!eventDAO.clientExists(clientId)) {
+                                throw new ExclusiveAccessException("Sponsoring Client ID #" + clientId + " does not exist.");
+                            }
+                            String clientName = eventDAO.resolveClientName(clientId);
+                            String title = params.getOrDefault("title", "");
+                            String type = params.getOrDefault("eventType", "GALA");
+                            String venue = params.getOrDefault("venue", "");
+                            String date = params.getOrDefault("date", "");
+                            String security = params.getOrDefault("security", "");
+                            int guests = Integer.parseInt(params.getOrDefault("vipGuests", "0"));
+
+                            Event newEvent = "SUMMIT".equalsIgnoreCase(type)
+                                    ? new SummitEvent(0, clientId, clientName, title, venue, date, security, guests)
+                                    : new GalaEvent(0, clientId, clientName, title, venue, date, security, guests);
+
+                            VIPRegistry<Event> reg = new VIPRegistry<>();
+                            reg.register(newEvent);
+                            if (!eventDAO.insertEvent(newEvent)) {
+                                throw new ExclusiveAccessException("Database rejected the engagement insertion.");
+                            }
+                            DiscreetNotificationService.sendEncryptedDispatch(title, sessionEmail);
+                        }
+
+                        exchange.getResponseHeaders().set("Location", "/events?tab=" + tab);
+                        exchange.sendResponseHeaders(303, -1);
+                        exchange.close();
+                    } catch (ExclusiveAccessException | NumberFormatException ex) {
+                        String encodedErr = URLEncoder.encode(ex.getMessage(), StandardCharsets.UTF_8);
+                        exchange.getResponseHeaders().set("Location", "/events?tab=" + tab + "&err=" + encodedErr);
+                        exchange.sendResponseHeaders(303, -1);
+                        exchange.close();
+                    }
                     return;
                 }
 
+                String errorBanner = query.get("err");
                 sendResponse(exchange, 200, "text/html; charset=UTF-8",
-                        renderRolePortalHtml(eventDAO, activeSessionRole, activeSessionEmail, activeSessionEntityId, tab).getBytes(StandardCharsets.UTF_8));
+                        renderRolePortalHtml(eventDAO, sessionRole, sessionEmail, sessionEntityId, tab, errorBanner).getBytes(StandardCharsets.UTF_8));
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -334,7 +353,7 @@ public class SystemVerification {
         }
     }
 
-    private static String renderRolePortalHtml(EventDAO eventDAO, String role, String email, int entityId, String activeTab) {
+    private static String renderRolePortalHtml(EventDAO eventDAO, String role, String email, int entityId, String activeTab, String errorBanner) {
         List<Event> allEvents = eventDAO.getAllEvents();
         List<String[]> clients = eventDAO.getAllClients();
         List<String[]> vendors = eventDAO.getAllVendors();
@@ -345,16 +364,18 @@ public class SystemVerification {
         sb.append("<link href='https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap' rel='stylesheet'>");
         sb.append("</head><body>");
 
-        // Top Navigation Bar showing ONLY the current logged-in account and Sign Out
         sb.append("<nav class='navbar'><div class='brand-logo'>AURA PRIVÉ</div><div class='nav-links'>");
         sb.append("<a href='index.jsp'>Sanctuary Home</a>");
-        sb.append("<span style='color:var(--gold-accent);font-size:0.76rem;letter-spacing:0.12em;text-transform:uppercase;'>").append(Event.escapeHtml(email)).append("</span>");
+        sb.append("<span style='color:var(--gold-accent);font-size:0.76rem;letter-spacing:0.12em;text-transform:uppercase;'>").append(Event.escapeHtml(email)).append(" (").append(role).append(")</span>");
         sb.append("<a href='auth?action=logout' style='color:var(--danger-accent);'>Sign Out</a>");
         sb.append("</div></nav><main class='dashboard-container'>");
 
-        // =========================================================================
-        // 1. ADMIN VIEW (Secret Developer/Admin Console — Tabbed so it is never messy)
-        // =========================================================================
+        if (errorBanner != null && !errorBanner.isBlank()) {
+            sb.append("<div style='padding:1rem;border:1px solid var(--danger-accent);color:var(--danger-accent);border-radius:8px;margin-bottom:1.5rem;'>")
+              .append(Event.escapeHtml(errorBanner))
+              .append("</div>");
+        }
+
         if ("ADMIN".equals(role)) {
             sb.append("<div class='role-bar'><div><span class='badge-tag' style='margin:0;'>Sovereign System Administration</span>");
             sb.append("<h2 style='font-family:var(--font-heading);font-size:1.6rem;'>Executive Developer & Concierge Console</h2></div>");
@@ -389,22 +410,14 @@ public class SystemVerification {
             } else {
                 appendEventsTableAndForm(sb, allEvents, clients, true, 1);
             }
-        }
-        // =========================================================================
-        // 2. CLIENT VIEW (Strictly isolated to the Client's own bookings)
-        // =========================================================================
-        else if ("CLIENT".equals(role)) {
+        } else if ("CLIENT".equals(role)) {
             List<Event> myEvents = new ArrayList<>();
             for (Event ev : allEvents) {
                 if (ev.getClientId() == entityId) myEvents.add(ev);
             }
             sb.append("<div class='section-header' style='text-align:left;margin-bottom:1.5rem;'><span class='badge-tag'>Private Client Sanctuary • End-to-End Encrypted</span><h2>My Commissioned Engagements</h2></div>");
             appendEventsTableAndForm(sb, myEvents, clients, false, entityId);
-        }
-        // =========================================================================
-        // 3. VENDOR VIEW (Strictly isolated to Logistics & Security Operations)
-        // =========================================================================
-        else if ("VENDOR".equals(role)) {
+        } else if ("VENDOR".equals(role)) {
             sb.append("<div class='section-header' style='text-align:left;margin-bottom:1.5rem;'><span class='badge-tag'>Syndicate Operations Terminal • Zero Client Identity Exposure</span><h2>Assigned Sanctuary Logistics Briefings</h2></div>");
             sb.append("<div class='table-wrapper'><table><thead><tr><th>Briefing ID</th><th>Engagement Tier</th><th>Sanctuary Venue</th><th>Deployment Date</th><th>VIP Headcount</th><th>Required Protocol</th><th>Operational Status</th></tr></thead><tbody>");
             for (Event ev : allEvents) {
@@ -425,7 +438,7 @@ public class SystemVerification {
 
     private static void appendEventsTableAndForm(StringBuilder sb, List<Event> events, List<String[]> clients, boolean isAdmin, int clientId) {
         sb.append("<div class='table-wrapper'><table><thead><tr><th>ID</th>");
-        if (isAdmin) sb.append("<th>Client</th>");
+        if (isAdmin) sb.append("<th>Sponsoring Client</th>");
         sb.append("<th>Title & Class</th><th>Sanctuary Venue</th><th>Date</th><th>VIP Guests</th><th>Clearance</th><th>Polymorphic Fee</th><th>Manage Booking</th></tr></thead><tbody>");
 
         if (events.isEmpty()) {
@@ -434,7 +447,9 @@ public class SystemVerification {
         for (Event ev : events) {
             String curSec = ev.getSecurityClearance();
             sb.append("<tr><td>#PRV-00").append(ev.getEventId()).append("</td>");
-            if (isAdmin) sb.append("<td>Client #").append(ev.getClientId()).append("</td>");
+            if (isAdmin) {
+                sb.append("<td><strong>").append(Event.escapeHtml(ev.getClientName())).append("</strong><br><small style='color:var(--text-muted);'>Client #").append(ev.getClientId()).append("</small></td>");
+            }
             sb.append("<td><strong>").append(Event.escapeHtml(ev.getEventTitle())).append("</strong><br><small style='color:var(--gold-accent);font-weight:600;'>[").append(Event.escapeHtml(ev.getEventType())).append("]</small></td>")
               .append("<td>").append(Event.escapeHtml(ev.getVenueLocation())).append("</td>")
               .append("<td>").append(Event.escapeHtml(ev.getEventDate())).append("</td>")
