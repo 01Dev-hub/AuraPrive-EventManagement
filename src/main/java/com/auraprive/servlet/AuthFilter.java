@@ -15,7 +15,7 @@ import javax.servlet.http.HttpSession;
 /**
  * Security filter intercepting unauthenticated requests to /events and redirecting to login.jsp.
  */
-@WebFilter("/events")
+@WebFilter({"/events", "/dashboard.jsp"})
 public class AuthFilter implements Filter {
 
     @Override

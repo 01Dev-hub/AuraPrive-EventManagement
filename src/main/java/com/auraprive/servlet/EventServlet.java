@@ -81,15 +81,30 @@ public class EventServlet extends HttpServlet {
         int sessionClientId = (entityIdObj != null) ? entityIdObj : 1;
         String action = request.getParameter("action");
 
-        if ("VENDOR".equalsIgnoreCase(role)) {
-            response.sendRedirect(request.getContextPath() + "/events?err=Vendor+accounts+have+read-only+logistics+access.");
+       if ("VENDOR".equalsIgnoreCase(role)) {
+            if ("updateVendorStatus".equalsIgnoreCase(action)) {
+                try {
+                    int eventId = Integer.parseInt(request.getParameter("eventId"));
+                    String vendorStatus = request.getParameter("vendorStatus");
+                    String vendorEmail = String.valueOf(session.getAttribute("conciergeUser"));
+                    if (!eventDAO.updateVendorStatus(eventId, vendorStatus, vendorEmail)) {
+                        throw new ExclusiveAccessException("This engagement is already accepted and locked by another vendor.");
+                    }
+                    DiscreetNotificationService.sendEncryptedDispatch("Vendor Status -> " + vendorStatus, vendorEmail);
+                    response.sendRedirect(request.getContextPath() + "/events");
+                } catch (Exception e) {
+                    response.sendRedirect(request.getContextPath() + "/events?err=" + URLEncoder.encode(e.getMessage(), StandardCharsets.UTF_8));
+                }
+                return;
+            }
+            response.sendRedirect(request.getContextPath() + "/events?err=Vendors+may+only+update+logistics+fulfillment+status.");
             return;
         }
-
         try {
             if ("delete".equalsIgnoreCase(action)) {
                 int eventId = Integer.parseInt(request.getParameter("eventId"));
-                if (!eventDAO.deleteEvent(eventId)) {
+               requireOwnership(role, sessionClientId, eventId);
+if (!eventDAO.deleteEvent(eventId)) {
                     throw new ExclusiveAccessException("Unable to delete engagement #" + eventId + " (record not found).");
                 }
                 response.sendRedirect(request.getContextPath() + "/events");
@@ -101,7 +116,8 @@ public class EventServlet extends HttpServlet {
                 String security = request.getParameter("security");
                 int guests = Integer.parseInt(request.getParameter("vipGuests"));
 
-                if (!Event.isValidClearance(security)) {
+requireOwnership(role, sessionClientId, eventId);
+if (!Event.isValidClearance(security)) { 
                     throw new ExclusiveAccessException("Invalid security clearance level specified.");
                 }
                 if (guests < 1 || guests > 500) {
@@ -160,10 +176,14 @@ public class EventServlet extends HttpServlet {
                     : new GalaEvent(0, clientId, clientName, title, venue, date, security, vipGuests);
 
             VIPRegistry<Event> validationRegistry = new VIPRegistry<>();
-            validationRegistry.register(newEvent);
+           validationRegistry.register(newEvent);
+newEvent.validateNewBooking();
 
-            if (!eventDAO.insertEvent(newEvent)) {
-                throw new ExclusiveAccessException("Database rejected the engagement insertion.");
+            if (!eventDAO.isVenueAvailable(venue, date)) {
+                throw new ExclusiveAccessException("Sanctuary Buyout Conflict: '" + venue + "' is already reserved for an exclusive buyout on " + date + ".");
+            }
+            if (!eventDAO.insertEventIfVenueFree(newEvent)) {
+              throw new ExclusiveAccessException("Engagement could not be saved: the sanctuary was just reserved by someone else, or the database rejected it.");
             }
 
             DiscreetNotificationService.sendEncryptedDispatch(title, String.valueOf(session.getAttribute("conciergeUser")));
@@ -172,6 +192,16 @@ public class EventServlet extends HttpServlet {
         } catch (ExclusiveAccessException | NumberFormatException e) {
             String encodedErr = URLEncoder.encode(e.getMessage(), StandardCharsets.UTF_8);
             response.sendRedirect(request.getContextPath() + "/events?err=" + encodedErr);
+        }
+    }
+        /** CLIENT accounts may only change or cancel their own engagements (ADMIN may touch any). */
+    private void requireOwnership(String role, int sessionClientId, int eventId) throws ExclusiveAccessException {
+        Event existing = eventDAO.getEventById(eventId);
+        if (existing == null) {
+            throw new ExclusiveAccessException("Engagement #" + eventId + " not found.");
+        }
+        if ("CLIENT".equalsIgnoreCase(role) && existing.getClientId() != sessionClientId) {
+            throw new ExclusiveAccessException("Access denied: You can only modify your own engagements.");
         }
     }
 }

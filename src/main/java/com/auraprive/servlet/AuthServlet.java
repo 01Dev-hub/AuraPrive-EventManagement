@@ -27,17 +27,20 @@ public class AuthServlet extends HttpServlet {
     protected void doGet(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         String action = request.getParameter("action");
+        HttpSession session = request.getSession(false);
         if ("logout".equalsIgnoreCase(action)) {
-            HttpSession session = request.getSession(false);
             if (session != null) {
                 session.invalidate();
             }
             response.sendRedirect(request.getContextPath() + "/login.jsp?msg=Session+signed+out+cleanly.");
             return;
         }
+        if (session != null && session.getAttribute("loggedInRole") != null) {
+            response.sendRedirect(request.getContextPath() + "/events");
+            return;
+        }
         request.getRequestDispatcher("login.jsp").forward(request, response);
     }
-
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
@@ -81,6 +84,7 @@ public class AuthServlet extends HttpServlet {
 
             EventDAO.registerAccountCredentials(email, password, role, entityId);
             HttpSession session = request.getSession(true);
+            request.changeSessionId(); // new session id after login (prevents session fixation)
             session.setAttribute("conciergeUser", email);
             session.setAttribute("loggedInRole", role);
             session.setAttribute("loggedInEntityId", entityId);
@@ -109,7 +113,8 @@ public class AuthServlet extends HttpServlet {
         String password = request.getParameter("password");
         String[] account = EventDAO.authenticateAccount(email, password);
         if (account != null) {
-            HttpSession session = request.getSession(true);
+            HttpSession session = request.getSession(true); 
+            request.changeSessionId();
             session.setAttribute("conciergeUser", email);
             session.setAttribute("loggedInRole", account[1]);
             session.setAttribute("loggedInEntityId", Integer.parseInt(account[2]));
