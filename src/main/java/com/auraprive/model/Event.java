@@ -23,6 +23,7 @@ public abstract class Event implements SecuredEntity {
     private String eventDate;
     private String securityLevel;
     private int vipGuests;
+    private String vendorStatus = "Pending Vendor Acceptance";
 
     public Event(int eventId, int clientId, String clientName, String eventTitle, String venueLocation,
                  String eventDate, String securityLevel, int vipGuests) {
@@ -49,27 +50,21 @@ public abstract class Event implements SecuredEntity {
     public abstract double calculateBaseLogisticsFee();
     public abstract String getEventType();
 
-    /**
-     * Centralized server-side validation for title, venue, future/present date, clearance allow-list, and guest count.
-     */
     public void validatePayload() throws ExclusiveAccessException {
         if (clientId < 1) {
             throw new ExclusiveAccessException("Invalid sponsoring client ID.");
         }
-        if (eventTitle == null || eventTitle.trim().length() < 3) {
-            throw new ExclusiveAccessException("Engagement title must contain at least 3 characters.");
+        if (eventTitle == null || eventTitle.trim().length() < 3 || eventTitle.trim().length() > 150) {
+            throw new ExclusiveAccessException("Engagement title must be between 3 and 150 characters.");
         }
-        if (venueLocation == null || venueLocation.trim().isEmpty()) {
-            throw new ExclusiveAccessException("Sanctuary venue location cannot be empty.");
+        if (venueLocation == null || venueLocation.trim().isEmpty() || venueLocation.trim().length() > 150) {
+            throw new ExclusiveAccessException("Sanctuary venue location must be between 1 and 150 characters.");
         }
         if (eventDate == null || eventDate.trim().isEmpty()) {
             throw new ExclusiveAccessException("Engagement date is required.");
         }
         try {
-            LocalDate parsedDate = LocalDate.parse(eventDate.trim());
-            if (parsedDate.isBefore(LocalDate.now())) {
-                throw new ExclusiveAccessException("Engagement date (" + eventDate + ") cannot be in the past.");
-            }
+                       LocalDate.parse(eventDate.trim()); // format check only; the past-date rule is in validateNewBooking()
         } catch (DateTimeParseException e) {
             throw new ExclusiveAccessException("Invalid date format (" + eventDate + "). Expected YYYY-MM-DD.");
         }
@@ -79,6 +74,12 @@ public abstract class Event implements SecuredEntity {
         if (!verifyAccess()) {
             throw new ExclusiveAccessException("Unauthorized security clearance '" + securityLevel
                 + "'. Allowed: Maximum Discretion, Diplomatic Tier, Confidential.");
+        }
+    }    /** Extra rule for NEW bookings only (stored events may legitimately be in the past). */
+    public void validateNewBooking() throws ExclusiveAccessException {
+        validatePayload();
+        if (LocalDate.parse(eventDate.trim()).isBefore(LocalDate.now())) {
+            throw new ExclusiveAccessException("Engagement date (" + eventDate + ") cannot be in the past.");
         }
     }
 
@@ -115,6 +116,12 @@ public abstract class Event implements SecuredEntity {
     public String getEventDate() { return eventDate; }
     public String getSecurityLevel() { return securityLevel; }
     public void setSecurityLevel(String securityLevel) { this.securityLevel = securityLevel; }
+    private String assignedVendor = "";
+
     public int getVipGuests() { return vipGuests; }
     public void setVipGuests(int vipGuests) { this.vipGuests = vipGuests; }
+    public String getVendorStatus() { return vendorStatus; }
+    public void setVendorStatus(String vendorStatus) { this.vendorStatus = vendorStatus; }
+    public String getAssignedVendor() { return assignedVendor; }
+    public void setAssignedVendor(String assignedVendor) { this.assignedVendor = (assignedVendor == null) ? "" : assignedVendor; }
 }

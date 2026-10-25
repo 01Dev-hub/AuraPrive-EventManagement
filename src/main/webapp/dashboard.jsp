@@ -1,7 +1,11 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
 <%@ page import="java.util.List, com.auraprive.model.Event" %>
 <%
-    String role = String.valueOf(session.getAttribute("loggedInRole") != null ? session.getAttribute("loggedInRole") : "ADMIN");
+      if (session.getAttribute("loggedInRole") == null) {
+        response.sendRedirect(request.getContextPath() + "/login.jsp?err=Please+sign+in+to+access+the+portal.");
+        return;
+    }
+    String role = String.valueOf(session.getAttribute("loggedInRole"));
     String userEmail = String.valueOf(session.getAttribute("conciergeUser") != null ? session.getAttribute("conciergeUser") : "Authenticated");
     Integer entityIdObj = (Integer) session.getAttribute("loggedInEntityId");
     int activeClientId = (entityIdObj != null) ? entityIdObj : 1;
@@ -18,13 +22,17 @@
 <body>
     <nav class="navbar">
         <div class="brand-logo">AURA PRIVÉ</div>
-        <div class="nav-links">
+        <div class="nav-links" style="align-items: center;">
             <a href="index.jsp">Sanctuary Home</a>
             <span style="color:var(--gold-accent);font-size:0.76rem;letter-spacing:0.12em;text-transform:uppercase;"><%= Event.escapeHtml(userEmail) %> (<%= Event.escapeHtml(role) %>)</span>
-            <a href="auth?action=logout" style="color:var(--danger-accent);">Sign Out</a>
+            <a href="auth?action=logout" title="End Session" aria-label="End Session" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;border:1px solid var(--danger-accent);color:var(--danger-accent);">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+                    <line x1="12" y1="2" x2="12" y2="12"></line>
+                </svg>
+            </a>
         </div>
     </nav>
-
     <main class="dashboard-container">
         <div class="section-header" style="text-align: left; margin-bottom: 1.5rem;">
             <span class="badge-tag"><%= "VENDOR".equalsIgnoreCase(role) ? "Syndicate Logistics Terminal • Read-Only" : "Restricted Concierge & Client Sanctuary" %></span>
@@ -42,17 +50,18 @@
                 <thead>
                     <tr>
                         <th>ID</th>
-                        <% if (!"VENDOR".equalsIgnoreCase(role)) { %>
-                            <th>Sponsoring Client (SQL JOIN)</th>
-                        <% } %>
+                        <th>Client</th>
                         <th>Title & Tier</th>
                         <th>Sanctuary Venue</th>
                         <th>Date</th>
                         <th>VIP Guests</th>
                         <th>Security Clearance</th>
+                        <th>Vendor Status</th>
                         <% if (!"VENDOR".equalsIgnoreCase(role)) { %>
                             <th>Polymorphic Fee</th>
                             <th>Manage Booking</th>
+                        <% } else { %>
+                            <th>Vendor Action (Accept / Update)</th>
                         <% } %>
                     </tr>
                 </thead>
@@ -61,15 +70,11 @@
                         List<Event> events = (List<Event>) request.getAttribute("events");
                         if (events != null && !events.isEmpty()) {
                             for (Event ev : events) {
+                                String vStat = ev.getVendorStatus();
                     %>
                     <tr>
-                        <td>#PRV-00<%= ev.getEventId() %></td>
-                        <% if (!"VENDOR".equalsIgnoreCase(role)) { %>
-                            <td>
-                                <strong><%= Event.escapeHtml(ev.getClientName()) %></strong><br>
-                                <small style="color: var(--text-muted);">Client #<%= ev.getClientId() %></small>
-                            </td>
-                        <% } %>
+                     <td>#PRV-00<%= ev.getEventId() %></td>
+<td><%= "VENDOR".equalsIgnoreCase(role) ? ("Redacted (Client #" + ev.getClientId() + ")") : Event.escapeHtml(ev.getClientName()) %></td>
                         <td>
                             <strong><%= Event.escapeHtml(ev.getEventTitle()) %></strong><br>
                             <small style="color: var(--gold-accent);">[<%= Event.escapeHtml(ev.getEventType()) %>]</small>
@@ -78,6 +83,7 @@
                         <td><%= Event.escapeHtml(ev.getEventDate()) %></td>
                         <td><%= ev.getVipGuests() %></td>
                         <td><%= Event.escapeHtml(ev.getSecurityClearance()) %></td>
+                        <td><span style="color: var(--gold-accent); font-weight: 600;"><%= Event.escapeHtml(vStat) %></span></td>
                         <% if (!"VENDOR".equalsIgnoreCase(role)) { %>
                             <td>$<%= String.format("%,.2f", ev.calculateBaseLogisticsFee()) %></td>
                             <td>
@@ -98,6 +104,28 @@
                                     <button type="submit" class="btn-small btn-danger">Cancel</button>
                                 </form>
                             </td>
+                        <% } else {
+                            String owner = ev.getAssignedVendor();
+                            boolean claimedByOther = !owner.isEmpty() && !owner.equalsIgnoreCase(userEmail);
+                        %>
+                            <td>
+                                <% if (claimedByOther) { %>
+                                    <span style="color: var(--text-muted); font-size: 0.78rem; padding: 0.4rem 0.7rem; border: 1px solid var(--border-subtle); border-radius: 6px; display: inline-block;">🔒 Claimed by Another Vendor</span>
+                                <% } else { %>
+                                    <form action="events" method="POST" class="inline-form">
+                                        <input type="hidden" name="action" value="updateVendorStatus">
+                                        <input type="hidden" name="eventId" value="<%= ev.getEventId() %>">
+                                        <select name="vendorStatus" style="width: 195px; padding: 0.35rem; font-size: 0.75rem;">
+                                            <option value="Pending Vendor Acceptance" <%= "Pending Vendor Acceptance".equals(vStat) ? "selected" : "" %>>Pending Vendor Acceptance</option>
+                                            <option value="Accepted & Team Assigned" <%= "Accepted & Team Assigned".equals(vStat) ? "selected" : "" %>>Accept & Assign Team</option>
+                                            <option value="Airspace & Perimeter Secured" <%= "Airspace & Perimeter Secured".equals(vStat) ? "selected" : "" %>>Airspace & Perimeter Secured</option>
+                                            <option value="Deployed On-Site" <%= "Deployed On-Site".equals(vStat) ? "selected" : "" %>>Deployed On-Site</option>
+                                            <option value="Declined by Vendor" <%= "Declined by Vendor".equals(vStat) ? "selected" : "" %>>Decline Request</option>
+                                        </select>
+                                        <button type="submit" class="btn-small">Confirm Action</button>
+                                    </form>
+                                <% } %>
+                            </td>
                         <% } %>
                     </tr>
                     <%
@@ -105,7 +133,7 @@
                         } else {
                     %>
                     <tr>
-                        <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 2rem;">No confidential curations registered for this view.</td>
+                        <td colspan="10" style="text-align: center; color: var(--text-muted); padding: 2rem;">No confidential curations registered for this view.</td>
                     </tr>
                     <%
                         }

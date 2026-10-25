@@ -120,10 +120,20 @@ public class SystemVerification {
             try {
                 String path = exchange.getRequestURI().getPath();
                 Map<String, String> query = parseFormParams(exchange.getRequestURI().getRawQuery());
+                String[] activeSession = getActiveSession(exchange);
 
                 if (path.equals("/") || path.equals("/index.jsp")) {
                     String html = Files.readString(webappDir.resolve("index.jsp"), StandardCharsets.UTF_8);
-                    html = html.replaceAll("<%@[^>]*%>", "");
+                    html = html.replaceAll("<%@[^>]*%>", "").replaceAll("(?s)<%.*?%>", "");
+                    String navHtml = "<a href=\"#services\">Bespoke Pillars</a>";
+                    if (activeSession != null) {
+                        navHtml += "<a href=\"events\" style=\"color:var(--gold-accent);\">My Active Portal (" + Event.escapeHtml(activeSession[1]) + ")</a>"
+                                 + "<a href=\"auth?action=logout\" class=\"power-logout-btn\" title=\"End Session\" aria-label=\"End Session\">"
+                                 + "<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M18.36 6.64a9 9 0 1 1-12.73 0\"></path><line x1=\"12\" y1=\"2\" x2=\"12\" y2=\"12\"></line></svg></a>";
+                    } else {
+                        navHtml += "<a href=\"events\">Client / Vendor Portal</a>";
+                    }
+                    html = html.replaceAll("(?s)<div class=\"nav-links\"[^>]*>.*?</div>", "<div class=\"nav-links\" style=\"align-items:center;\">" + navHtml + "</div>");
                     sendResponse(exchange, 200, "text/html; charset=UTF-8", html.getBytes(StandardCharsets.UTF_8));
                 } else if (path.equals("/login.jsp") || path.equals("/auth")) {
                     if ("logout".equalsIgnoreCase(query.get("action"))) {
@@ -131,6 +141,13 @@ public class SystemVerification {
                         if (token != null) SESSIONS.remove(token);
                         exchange.getResponseHeaders().add("Set-Cookie", "AURA_SESSION_ID=; Path=/; Max-Age=0; HttpOnly");
                         exchange.getResponseHeaders().set("Location", "/login.jsp?msg=Session+signed+out+cleanly.");
+                        exchange.sendResponseHeaders(303, -1);
+                        exchange.close();
+                        return;
+                    }
+                    // If user is already logged in on GET /login.jsp, take them straight to their portal
+                    if ("GET".equalsIgnoreCase(exchange.getRequestMethod()) && activeSession != null) {
+                        exchange.getResponseHeaders().set("Location", "/events");
                         exchange.sendResponseHeaders(303, -1);
                         exchange.close();
                         return;
@@ -206,15 +223,8 @@ public class SystemVerification {
                         return;
                     }
 
-                    String html = Files.readString(webappDir.resolve("login.jsp"), StandardCharsets.UTF_8);
-                    html = html.replaceAll("<%@[^>]*%>", "").replaceAll("(?s)<%.*?%>", "");
-                    String banner = "";
-                    if (query.containsKey("err")) {
-                        banner = "<div style='padding:0.85rem;margin-bottom:1.2rem;border:1px solid var(--danger-accent);color:var(--danger-accent);border-radius:8px;font-size:0.84rem;'>" + Event.escapeHtml(query.get("err")) + "</div>";
-                    } else if (query.containsKey("msg")) {
-                        banner = "<div style='padding:0.85rem;margin-bottom:1.2rem;border:1px solid var(--gold-accent);color:var(--gold-accent);border-radius:8px;font-size:0.84rem;'>" + Event.escapeHtml(query.get("msg")) + "</div>";
-                    }
-                    html = html.replace("<div class=\"tab-bar\">", banner + "<div class=\"tab-bar\">");
+                   String html = Files.readString(webappDir.resolve("login.jsp"), StandardCharsets.UTF_8);
+                    html = html.replaceAll("<%@[^>]*%>", "");
                     sendResponse(exchange, 200, "text/html; charset=UTF-8", html.getBytes(StandardCharsets.UTF_8));
                 } else if (path.endsWith(".css")) {
                     byte[] bytes = Files.readAllBytes(webappDir.resolve(path.substring(1)));
@@ -254,16 +264,42 @@ public class SystemVerification {
 
                     try {
                         if ("VENDOR".equalsIgnoreCase(sessionRole)) {
-                            throw new ExclusiveAccessException("Vendor accounts have read-only logistics access.");
+                            if ("updateVendorStatus".equalsIgnoreCase(action)) {
+                                int eventId = Integer.parseInt(params.getOrDefault("eventId", "0"));
+                                String vendorStatus = params.getOrDefault("vendorStatus", "Accepted & Team Assigned");
+                                if (!eventDAO.updateVendorStatus(eventId, vendorStatus, sessionEmail)) {
+                                    throw new ExclusiveAccessException("This engagement is already accepted and locked by another vendor.");
+                                }
+                                DiscreetNotificationService.sendEncryptedDispatch("Vendor Status Updated: " + vendorStatus, sessionEmail);
+                                exchange.getResponseHeaders().set("Location", "/events");
+                                exchange.sendResponseHeaders(303, -1);
+                                exchange.close();
+                                return;
+                            }
+                            throw new ExclusiveAccessException("Vendors may only update event fulfillment status.");
                         }
 
                         if ("delete".equalsIgnoreCase(action)) {
                             int eventId = Integer.parseInt(params.getOrDefault("eventId", "0"));
+                            Event existing = eventDAO.getEventById(eventId);
+                            if (existing == null) {
+                                throw new ExclusiveAccessException("Engagement #" + eventId + " not found.");
+                            }
+                            if ("CLIENT".equalsIgnoreCase(sessionRole) && existing.getClientId() != sessionEntityId) {
+                                throw new ExclusiveAccessException("Access denied: You can only cancel your own engagements.");
+                            }
                             if (!eventDAO.deleteEvent(eventId)) {
-                                throw new ExclusiveAccessException("Unable to delete engagement #" + eventId + " (not found).");
+                                throw new ExclusiveAccessException("Unable to delete engagement #" + eventId + ".");
                             }
                         } else if ("update".equalsIgnoreCase(action)) {
                             int eventId = Integer.parseInt(params.getOrDefault("eventId", "0"));
+                            Event existing = eventDAO.getEventById(eventId);
+                            if (existing == null) {
+                                throw new ExclusiveAccessException("Engagement #" + eventId + " not found.");
+                            }
+                            if ("CLIENT".equalsIgnoreCase(sessionRole) && existing.getClientId() != sessionEntityId) {
+                                throw new ExclusiveAccessException("Access denied: You can only update your own engagements.");
+                            }
                             String security = params.getOrDefault("security", "");
                             int guests = Integer.parseInt(params.getOrDefault("vipGuests", "0"));
                             if (!Event.isValidClearance(security)) {
@@ -313,9 +349,13 @@ public class SystemVerification {
                                     : new GalaEvent(0, clientId, clientName, title, venue, date, security, guests);
 
                             VIPRegistry<Event> reg = new VIPRegistry<>();
-                            reg.register(newEvent);
-                            if (!eventDAO.insertEvent(newEvent)) {
-                                throw new ExclusiveAccessException("Database rejected the engagement insertion.");
+                           reg.register(newEvent);
+newEvent.validateNewBooking();
+                            if (!eventDAO.isVenueAvailable(venue, date)) {
+                                throw new ExclusiveAccessException("Sanctuary Buyout Conflict: '" + venue + "' is already reserved for an exclusive buyout on " + date + ".");
+                            }
+                           if (!eventDAO.insertEventIfVenueFree(newEvent)) {
+                               throw new ExclusiveAccessException("Engagement could not be saved: the sanctuary was just reserved by someone else, or the database rejected it.");
                             }
                             DiscreetNotificationService.sendEncryptedDispatch(title, sessionEmail);
                         }
@@ -323,7 +363,12 @@ public class SystemVerification {
                         exchange.getResponseHeaders().set("Location", "/events?tab=" + tab);
                         exchange.sendResponseHeaders(303, -1);
                         exchange.close();
-                    } catch (ExclusiveAccessException | NumberFormatException ex) {
+                    } catch (NumberFormatException ex) {
+                        String encodedErr = URLEncoder.encode("Please enter valid numeric values.", StandardCharsets.UTF_8);
+                        exchange.getResponseHeaders().set("Location", "/events?tab=" + tab + "&err=" + encodedErr);
+                        exchange.sendResponseHeaders(303, -1);
+                        exchange.close();
+                    } catch (ExclusiveAccessException ex) {
                         String encodedErr = URLEncoder.encode(ex.getMessage(), StandardCharsets.UTF_8);
                         exchange.getResponseHeaders().set("Location", "/events?tab=" + tab + "&err=" + encodedErr);
                         exchange.sendResponseHeaders(303, -1);
@@ -337,6 +382,13 @@ public class SystemVerification {
                         renderRolePortalHtml(eventDAO, sessionRole, sessionEmail, sessionEntityId, tab, errorBanner).getBytes(StandardCharsets.UTF_8));
             } catch (Exception e) {
                 e.printStackTrace();
+                try {
+                    String page = "<html><body style='background:#0a0a0a;color:#f5f5f7;font-family:sans-serif;padding:3rem'>"
+                                + "<h2 style='color:#ff6b6b'>Request rejected</h2><p>"
+                                + Event.escapeHtml(String.valueOf(e.getMessage()))
+                                + "</p><p><a style='color:#c5a059' href='/events'>Back to dashboard</a></p></body></html>";
+                    sendResponse(exchange, 400, "text/html; charset=UTF-8", page.getBytes(StandardCharsets.UTF_8));
+                } catch (IOException ignored) {}
             }
         });
 
@@ -364,10 +416,11 @@ public class SystemVerification {
         sb.append("<link href='https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap' rel='stylesheet'>");
         sb.append("</head><body>");
 
-        sb.append("<nav class='navbar'><div class='brand-logo'>AURA PRIVÉ</div><div class='nav-links'>");
+       sb.append("<nav class='navbar'><div class='brand-logo'>AURA PRIVÉ</div><div class='nav-links' style='align-items:center;'>");
         sb.append("<a href='index.jsp'>Sanctuary Home</a>");
         sb.append("<span style='color:var(--gold-accent);font-size:0.76rem;letter-spacing:0.12em;text-transform:uppercase;'>").append(Event.escapeHtml(email)).append(" (").append(role).append(")</span>");
-        sb.append("<a href='auth?action=logout' style='color:var(--danger-accent);'>Sign Out</a>");
+        sb.append("<a href='auth?action=logout' title='End Session' aria-label='End Session' style='display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;border:1px solid var(--danger-accent);color:var(--danger-accent);'>")
+          .append("<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round'><path d='M18.36 6.64a9 9 0 1 1-12.73 0'></path><line x1='12' y1='2' x2='12' y2='12'></line></svg></a>");
         sb.append("</div></nav><main class='dashboard-container'>");
 
         if (errorBanner != null && !errorBanner.isBlank()) {
@@ -415,19 +468,45 @@ public class SystemVerification {
             for (Event ev : allEvents) {
                 if (ev.getClientId() == entityId) myEvents.add(ev);
             }
-            sb.append("<div class='section-header' style='text-align:left;margin-bottom:1.5rem;'><span class='badge-tag'>Private Client Sanctuary • End-to-End Encrypted</span><h2>My Commissioned Engagements</h2></div>");
+            sb.append("<div class='section-header' style='text-align:left;margin-bottom:1.5rem;'><span class='badge-tag'>Private Client Sanctuary • Live Vendor Telemetry</span><h2>My Commissioned Engagements</h2></div>");
             appendEventsTableAndForm(sb, myEvents, clients, false, entityId);
         } else if ("VENDOR".equals(role)) {
-            sb.append("<div class='section-header' style='text-align:left;margin-bottom:1.5rem;'><span class='badge-tag'>Syndicate Operations Terminal • Zero Client Identity Exposure</span><h2>Assigned Sanctuary Logistics Briefings</h2></div>");
-            sb.append("<div class='table-wrapper'><table><thead><tr><th>Briefing ID</th><th>Engagement Tier</th><th>Sanctuary Venue</th><th>Deployment Date</th><th>VIP Headcount</th><th>Required Protocol</th><th>Operational Status</th></tr></thead><tbody>");
+            sb.append("<div class='section-header' style='text-align:left;margin-bottom:1.5rem;'><span class='badge-tag'>Syndicate Vendor Operations Portal • Client Event Requests</span><h2>Incoming Client Event Requests & Logistics Dispatch</h2></div>");
+            sb.append("<div class='table-wrapper'><table><thead><tr><th>Request ID</th><th>Sponsoring Client</th><th>Event Title & Tier</th><th>Sanctuary Venue</th><th>Event Date</th><th>VIP Headcount</th><th>Required Clearance</th><th>Current Fulfillment Status</th><th>Vendor Action (Accept / Reject)</th></tr></thead><tbody>");
             for (Event ev : allEvents) {
-                sb.append("<tr><td>#LOG-00").append(ev.getEventId()).append("</td>")
-                  .append("<td><span style='color:var(--gold-accent);font-weight:600;'>").append(Event.escapeHtml(ev.getEventType())).append("</span></td>")
+                String vStat = ev.getVendorStatus();
+                String owner = ev.getAssignedVendor();
+                boolean claimedByOther = !owner.isEmpty() && !owner.equalsIgnoreCase(email);
+
+                sb.append("<tr><td>#REQ-00").append(ev.getEventId()).append("</td>")
+                  .append("<td><span style='color:var(--text-muted);'>Redacted (Client #").append(ev.getClientId()).append(")</span></td>")
+                  .append("<td><strong>").append(Event.escapeHtml(ev.getEventTitle())).append("</strong><br><small style='color:var(--gold-accent);font-weight:600;'>[").append(Event.escapeHtml(ev.getEventType())).append("]</small></td>")
                   .append("<td>").append(Event.escapeHtml(ev.getVenueLocation())).append("</td>")
                   .append("<td>").append(Event.escapeHtml(ev.getEventDate())).append("</td>")
                   .append("<td>").append(ev.getVipGuests()).append(" Guests</td>")
                   .append("<td>").append(Event.escapeHtml(ev.getSecurityClearance())).append("</td>")
-                  .append("<td><span style='color:var(--gold-accent);'>✓ Cleared for Deployment</span></td></tr>");
+                  .append("<td><span style='color:var(--gold-accent);font-weight:600;'>").append(Event.escapeHtml(vStat)).append("</span>");
+                if (!owner.isEmpty()) {
+                    sb.append("<br><small style='color:var(--text-muted);'>Assigned: ").append(Event.escapeHtml(owner)).append("</small>");
+                }
+                sb.append("</td><td>");
+
+                if (claimedByOther) {
+                    sb.append("<span style='color:var(--text-muted);font-size:0.78rem;padding:0.4rem 0.7rem;border:1px solid var(--border-subtle);border-radius:6px;display:inline-block;'>🔒 Claimed by Another Vendor</span>");
+                } else {
+                    sb.append("<form action='events' method='POST' class='inline-form'>")
+                      .append("<input type='hidden' name='action' value='updateVendorStatus'>")
+                      .append("<input type='hidden' name='eventId' value='").append(ev.getEventId()).append("'>")
+                      .append("<select name='vendorStatus' style='width:210px;padding:0.35rem;font-size:0.75rem;'>")
+                      .append("<option value='Pending Vendor Acceptance'").append("Pending Vendor Acceptance".equalsIgnoreCase(vStat) ? " selected" : "").append(">Pending Vendor Acceptance</option>")
+                      .append("<option value='Accepted & Team Assigned'").append("Accepted & Team Assigned".equalsIgnoreCase(vStat) ? " selected" : "").append(">Accept & Assign Team</option>")
+                      .append("<option value='Airspace & Perimeter Secured'").append("Airspace & Perimeter Secured".equalsIgnoreCase(vStat) ? " selected" : "").append(">Airspace & Perimeter Secured</option>")
+                      .append("<option value='Deployed On-Site'").append("Deployed On-Site".equalsIgnoreCase(vStat) ? " selected" : "").append(">Deployed On-Site</option>")
+                      .append("<option value='Declined by Vendor'").append("Declined by Vendor".equalsIgnoreCase(vStat) ? " selected" : "").append(">Decline Request</option>")
+                      .append("</select>")
+                      .append("<button type='submit' class='btn-small'>Confirm Action</button></form>");
+                }
+                sb.append("</td></tr>");
             }
             sb.append("</tbody></table></div>");
         }
@@ -438,23 +517,24 @@ public class SystemVerification {
 
     private static void appendEventsTableAndForm(StringBuilder sb, List<Event> events, List<String[]> clients, boolean isAdmin, int clientId) {
         sb.append("<div class='table-wrapper'><table><thead><tr><th>ID</th>");
-        if (isAdmin) sb.append("<th>Sponsoring Client</th>");
-        sb.append("<th>Title & Class</th><th>Sanctuary Venue</th><th>Date</th><th>VIP Guests</th><th>Clearance</th><th>Polymorphic Fee</th><th>Manage Booking</th></tr></thead><tbody>");
+        if (isAdmin) sb.append("<th>Client</th>");
+        sb.append("<th>Title & Class</th><th>Sanctuary Venue</th><th>Date</th><th>VIP Guests</th><th>Clearance</th><th>Vendor Fulfillment Status</th><th>Polymorphic Fee</th><th>Manage Booking</th></tr></thead><tbody>");
 
         if (events.isEmpty()) {
-            sb.append("<tr><td colspan='9' style='text-align:center;padding:2rem;color:var(--text-muted);'>No active engagements registered. Commission a new gathering below.</td></tr>");
+            sb.append("<tr><td colspan='10' style='text-align:center;padding:2rem;color:var(--text-muted);'>No active engagements registered. Commission a new gathering below.</td></tr>");
         }
         for (Event ev : events) {
             String curSec = ev.getSecurityClearance();
             sb.append("<tr><td>#PRV-00").append(ev.getEventId()).append("</td>");
             if (isAdmin) {
-                sb.append("<td><strong>").append(Event.escapeHtml(ev.getClientName())).append("</strong><br><small style='color:var(--text-muted);'>Client #").append(ev.getClientId()).append("</small></td>");
+                sb.append("<td>").append(Event.escapeHtml(ev.getClientName())).append("</td>");
             }
             sb.append("<td><strong>").append(Event.escapeHtml(ev.getEventTitle())).append("</strong><br><small style='color:var(--gold-accent);font-weight:600;'>[").append(Event.escapeHtml(ev.getEventType())).append("]</small></td>")
               .append("<td>").append(Event.escapeHtml(ev.getVenueLocation())).append("</td>")
               .append("<td>").append(Event.escapeHtml(ev.getEventDate())).append("</td>")
               .append("<td>").append(ev.getVipGuests()).append("</td>")
               .append("<td>").append(Event.escapeHtml(curSec)).append("</td>")
+              .append("<td><span style='color:var(--gold-accent);font-size:0.82rem;'>").append(Event.escapeHtml(ev.getVendorStatus())).append("</span></td>")
               .append("<td>$").append(String.format("%,.2f", ev.calculateBaseLogisticsFee())).append("</td>")
               .append("<td><form action='events' method='POST' class='inline-form'><input type='hidden' name='action' value='update'><input type='hidden' name='eventId' value='").append(ev.getEventId()).append("'>")
               .append("<select name='security' style='width:155px;padding:0.35rem;font-size:0.75rem;'>")

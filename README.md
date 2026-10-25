@@ -1,6 +1,6 @@
 # AURA PRIVÉ — Bespoke Private Event Management Platform
 
-Aura Privé is a private concierge and event curation platform engineered for ultra-high-net-worth individuals (UHNWIs). The system orchestrates zero-exposure royal galas, heritage palace buyouts, and closed-door diplomatic summits with an emphasis on privacy, bespoke logistics, and strict security protocols.
+Aura Privé is a private concierge and event curation platform. The system orchestrates zero-exposure royal galas, heritage palace buyouts, and closed-door diplomatic summits with an emphasis on privacy, bespoke logistics, and strict security protocols.
 
 The application is built on a Core Java backend, utilizing JDBC for relational database persistence, Java Servlets, Filters, and JSPs for web execution, and a responsive OKLCH glassmorphism UI.
 
@@ -124,7 +124,7 @@ AuraPrive-EventManagement/
 
 - **Admin / Developer Console:** `admin@pro.abc` (Full CRUD & multi-table administration across Events, Clients, and Vendors)
 - **Client Portal:** `client@pro.abc` (Isolated private bookings & engagement commissioning)
-- **Vendor Portal:** `ven@pro.abc` (Read-only logistics schedule with client identity anonymization)
+- **Vendor Portal:** `ven@pro.abc` (update or decline events created by clients)
 
 ### Manual Terminal Execution
 

@@ -25,22 +25,28 @@ public class EventDAO {
 
     private static boolean schemaVerified = false;
 
-    // Thread-safe CopyOnWriteArrayLists & AtomicInteger sequence generators for simulator mode
-    private static final CopyOnWriteArrayList<Event> fallbackEvents = new CopyOnWriteArrayList<>();
-    private static final CopyOnWriteArrayList<String[]> fallbackClients = new CopyOnWriteArrayList<>();
-    private static final CopyOnWriteArrayList<String[]> fallbackVendors = new CopyOnWriteArrayList<>();
+    private static final List<Event> fallbackEvents = new CopyOnWriteArrayList<>();
+    private static final List<String[]> fallbackClients = new CopyOnWriteArrayList<>();
+    private static final List<String[]> fallbackVendors = new CopyOnWriteArrayList<>();
 
-    private static final AtomicInteger NEXT_EVENT_ID = new AtomicInteger(3);
-    private static final AtomicInteger NEXT_CLIENT_ID = new AtomicInteger(4);
-    private static final AtomicInteger NEXT_VENDOR_ID = new AtomicInteger(4);
+    private static final AtomicInteger nextEventId = new AtomicInteger(3);
+    private static final AtomicInteger nextClientId = new AtomicInteger(4);
+    private static final AtomicInteger nextVendorId = new AtomicInteger(4);
 
     // Shared thread-safe credential store: email -> [sha256Password, ROLE, entityId]
     private static final Map<String, String[]> ACCOUNTS = new ConcurrentHashMap<>();
 
+    // Thread-safe tracking of Vendor Logistics Status and Exclusive Vendor Ownership per event_id
+    private static final Map<Integer, String> VENDOR_STATUS_MAP = new ConcurrentHashMap<>();
+    private static final Map<Integer, String> VENDOR_ASSIGNEE_MAP = new ConcurrentHashMap<>();
+    
+    // One static lock shared by every EventDAO instance (each servlet creates its own)
+    private static final Object BOOKING_LOCK = new Object();
+
     static {
         fallbackClients.add(new String[]{"1", "Maharaja Vikramaditya Rathore", "Sovereign Founders Circle", "rathore@vault.auraprive.in"});
         fallbackClients.add(new String[]{"2", "Arundhati Devi Scindia", "Diplomatic Black Tier", "scindia@vault.auraprive.in"});
-        fallbackClients.add(new String[]{"3", "Rajeshwar Singhania", "Apex Syndicate", "singhania@vault.auraprive.in"});
+        fallbackClients.add(new String[]{"3", "Rajeshwar Singhania", "Apex Syndicate", "client@pro.abc"});
 
         fallbackVendors.add(new String[]{"1", "Garuda Sovereign Security", "Counter-Surveillance & Airspace Lock", "Maximum Discretion"});
         fallbackVendors.add(new String[]{"2", "Dawat-e-Khas Royal Gastronomy", "Bespoke Heritage Culinary Curation", "Diplomatic Tier"});
@@ -49,9 +55,14 @@ public class EventDAO {
         fallbackEvents.add(new GalaEvent(1, 1, "Maharaja Vikramaditya Rathore", "Udaipur Royal Solstice Gala", "Taj Lake Palace, Udaipur", "2026-12-31", "Maximum Discretion", 60));
         fallbackEvents.add(new SummitEvent(2, 2, "Arundhati Devi Scindia", "Jodhpur Sovereign Founders Summit", "Umaid Bhawan Palace, Jodhpur", "2026-11-18", "Diplomatic Tier", 40));
 
+        // Both initial events start unclaimed so the first vendor can accept or decline them
+        VENDOR_STATUS_MAP.put(1, "Pending Vendor Acceptance");
+        VENDOR_STATUS_MAP.put(2, "Pending Vendor Acceptance");
+
         String defaultHash = sha256("123456");
         ACCOUNTS.put("admin@pro.abc", new String[]{defaultHash, "ADMIN", "0"});
-        ACCOUNTS.put("client@pro.abc", new String[]{defaultHash, "CLIENT", "1"});
+        // Mapped to Client #3 so client@pro.abc only sees events created by client@pro.abc
+        ACCOUNTS.put("client@pro.abc", new String[]{defaultHash, "CLIENT", "3"});
         ACCOUNTS.put("ven@pro.abc", new String[]{defaultHash, "VENDOR", "1"});
     }
 
@@ -87,12 +98,10 @@ public class EventDAO {
     }
 
     public static void registerAccountCredentials(String email, String rawPassword, String role, int entityId) {
-        ACCOUNTS.put(email.trim().toLowerCase(), new String[]{sha256(rawPassword), role.toUpperCase(), String.valueOf(entityId)});
+        String safeRole = "VENDOR".equalsIgnoreCase(role) ? "VENDOR" : "CLIENT";
+        ACCOUNTS.put(email.trim().toLowerCase(), new String[]{sha256(rawPassword), safeRole, String.valueOf(entityId)});
     }
 
-    /**
-     * Secure password change requiring old password verification (no unverified token bypass).
-     */
     public static boolean updatePassword(String email, String oldPassword, String newPassword) {
         if (email == null || oldPassword == null || newPassword == null || newPassword.length() < 6) {
             return false;
@@ -111,15 +120,20 @@ public class EventDAO {
         Connection conn = DatabaseConnection.getConnection();
         if (conn == null) return;
         try (Statement stmt = conn.createStatement()) {
-            try {
-                stmt.executeUpdate("ALTER TABLE exclusive_events ADD COLUMN event_type VARCHAR(30) NOT NULL DEFAULT 'GALA'");
-            } catch (SQLException ignored) {}
-            try {
-                stmt.executeUpdate("ALTER TABLE exclusive_events ADD COLUMN vip_guests INT NOT NULL DEFAULT 50");
-            } catch (SQLException ignored) {}
-
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS clients (client_id INT AUTO_INCREMENT PRIMARY KEY, full_name VARCHAR(120) NOT NULL, membership_tier VARCHAR(60) NOT NULL, encrypted_contact VARCHAR(150) NOT NULL)");
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS elite_vendors (vendor_id INT AUTO_INCREMENT PRIMARY KEY, vendor_name VARCHAR(120) NOT NULL, specialty VARCHAR(100) NOT NULL, security_clearance VARCHAR(60) NOT NULL)");
+            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS exclusive_events (event_id INT AUTO_INCREMENT PRIMARY KEY, client_id INT NOT NULL, event_title VARCHAR(150) NOT NULL, event_type VARCHAR(30) NOT NULL DEFAULT 'GALA', venue_location VARCHAR(150) NOT NULL, event_date DATE NOT NULL, security_level VARCHAR(60) NOT NULL, vip_guests INT NOT NULL DEFAULT 50, FOREIGN KEY (client_id) REFERENCES clients(client_id) ON DELETE CASCADE)");
+
+            try {
+                stmt.executeUpdate("ALTER TABLE exclusive_events ADD COLUMN event_type VARCHAR(30) NOT NULL DEFAULT 'GALA'");
+            } catch (SQLException e) {
+                if (e.getErrorCode() != 1060) throw e;
+            }
+            try {
+                stmt.executeUpdate("ALTER TABLE exclusive_events ADD COLUMN vip_guests INT NOT NULL DEFAULT 50");
+            } catch (SQLException e) {
+                if (e.getErrorCode() != 1060) throw e;
+            }
 
             stmt.executeUpdate("INSERT IGNORE INTO clients (client_id, full_name, membership_tier, encrypted_contact) VALUES (1, 'Maharaja Vikramaditya Rathore', 'Sovereign Founders Circle', 'rathore@vault.auraprive.in'), (2, 'Arundhati Devi Scindia', 'Diplomatic Black Tier', 'scindia@vault.auraprive.in'), (3, 'Rajeshwar Singhania', 'Apex Syndicate', 'singhania@vault.auraprive.in')");
             stmt.executeUpdate("INSERT IGNORE INTO elite_vendors (vendor_id, vendor_name, specialty, security_clearance) VALUES (1, 'Garuda Sovereign Security', 'Counter-Surveillance & Airspace Lock', 'Maximum Discretion'), (2, 'Dawat-e-Khas Royal Gastronomy', 'Bespoke Heritage Culinary Curation', 'Diplomatic Tier'), (3, 'Vayu Executive Aviation', 'Unlisted Charter & Helipad Logistics', 'Maximum Discretion')");
@@ -147,6 +161,75 @@ public class EventDAO {
         return "Client #" + clientId;
     }
 
+    public Event getEventById(int eventId) {
+        for (Event ev : getAllEvents()) {
+            if (ev.getEventId() == eventId) {
+                return ev;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Enforces Pillar 1 (Sanctuary Buyouts): Ensures a venue is exclusively isolated on a given date.
+     */
+    public boolean isVenueAvailable(String venueLocation, String eventDate) {
+        if (venueLocation == null || eventDate == null) return true;
+        for (Event ev : getAllEvents()) {
+            if (ev.getVenueLocation().trim().equalsIgnoreCase(venueLocation.trim())
+                    && ev.getEventDate().trim().equals(eventDate.trim())) {
+                return false;
+            }
+        }
+        return true;
+    }
+    /** Checks venue availability and inserts as ONE atomic step, so two requests cannot double-book. */
+    public boolean insertEventIfVenueFree(Event event) {
+        synchronized (BOOKING_LOCK) {
+            return isVenueAvailable(event.getVenueLocation(), event.getEventDate()) && insertEvent(event);
+        }
+    }
+
+    /** Vendor claim is check-then-act, so it runs under the shared lock. */
+    public boolean updateVendorStatus(int eventId, String newStatus, String vendorEmail) {
+        synchronized (BOOKING_LOCK) {
+            return updateVendorStatusLocked(eventId, newStatus, vendorEmail);
+        }
+    }
+
+    private boolean updateVendorStatusLocked(int eventId, String newStatus, String vendorEmail) {
+        if (newStatus == null || newStatus.isBlank() || vendorEmail == null || getEventById(eventId) == null) {
+            return false;
+        }
+        String cleanVendor = vendorEmail.trim().toLowerCase();
+        String currentOwner = VENDOR_ASSIGNEE_MAP.getOrDefault(eventId, "");
+
+        // Block another vendor if this event is already accepted/claimed by a different vendor
+        if (!currentOwner.isEmpty() && !currentOwner.equalsIgnoreCase(cleanVendor)) {
+            return false;
+        }
+
+        String trimmedStatus = newStatus.trim();
+        // If declined or reset to pending, release ownership so other vendors can accept it
+        if ("Declined by Vendor".equalsIgnoreCase(trimmedStatus)
+                || "Pending Vendor Acceptance".equalsIgnoreCase(trimmedStatus)) {
+            VENDOR_ASSIGNEE_MAP.remove(eventId);
+            VENDOR_STATUS_MAP.put(eventId, trimmedStatus);
+        } else {
+            // Lock ownership of this event to the accepting vendor
+            VENDOR_ASSIGNEE_MAP.put(eventId, cleanVendor);
+            VENDOR_STATUS_MAP.put(eventId, trimmedStatus);
+        }
+
+        for (Event ev : fallbackEvents) {
+            if (ev.getEventId() == eventId) {
+                ev.setVendorStatus(VENDOR_STATUS_MAP.get(eventId));
+                ev.setAssignedVendor(VENDOR_ASSIGNEE_MAP.getOrDefault(eventId, ""));
+            }
+        }
+        return true;
+    }
+
     // CREATE EVENT
     public boolean insertEvent(Event event) {
         if (!clientExists(event.getClientId())) {
@@ -156,8 +239,10 @@ public class EventDAO {
 
         Connection conn = DatabaseConnection.getConnection();
         if (conn == null) {
-            int nextId = NEXT_EVENT_ID.getAndIncrement();
-            event.setEventId(nextId);
+            int id = nextEventId.getAndIncrement();
+            event.setEventId(id);
+            VENDOR_STATUS_MAP.put(id, "Pending Vendor Acceptance");
+            VENDOR_ASSIGNEE_MAP.remove(id);
             fallbackEvents.add(0, event);
             return true;
         }
@@ -175,7 +260,10 @@ public class EventDAO {
             if (affected > 0) {
                 try (ResultSet keys = stmt.getGeneratedKeys()) {
                     if (keys.next()) {
-                        event.setEventId(keys.getInt(1));
+                        int id = keys.getInt(1);
+                        event.setEventId(id);
+                        VENDOR_STATUS_MAP.put(id, "Pending Vendor Acceptance");
+                        VENDOR_ASSIGNEE_MAP.remove(id);
                     }
                 }
                 return true;
@@ -187,10 +275,15 @@ public class EventDAO {
         }
     }
 
-    // READ EVENTS WITH RELATIONAL SQL JOIN ON CLIENTS TABLE
+    // READ EVENTS WITH RELATIONAL SQL LEFT JOIN ON CLIENTS TABLE
     public List<Event> getAllEvents() {
         Connection conn = DatabaseConnection.getConnection();
         if (conn == null) {
+            for (Event ev : fallbackEvents) {
+                ev.setClientName(resolveClientName(ev.getClientId()));
+                ev.setVendorStatus(VENDOR_STATUS_MAP.getOrDefault(ev.getEventId(), "Pending Vendor Acceptance"));
+                ev.setAssignedVendor(VENDOR_ASSIGNEE_MAP.getOrDefault(ev.getEventId(), ""));
+            }
             return new ArrayList<>(fallbackEvents);
         }
 
@@ -214,11 +307,12 @@ public class EventDAO {
                 String security = rs.getString("security_level");
                 int guests = rs.getInt("vip_guests");
 
-                if ("SUMMIT".equalsIgnoreCase(type)) {
-                    events.add(new SummitEvent(id, clientId, clientName, title, venue, date, security, guests));
-                } else {
-                    events.add(new GalaEvent(id, clientId, clientName, title, venue, date, security, guests));
-                }
+                Event ev = "SUMMIT".equalsIgnoreCase(type)
+                        ? new SummitEvent(id, clientId, clientName, title, venue, date, security, guests)
+                        : new GalaEvent(id, clientId, clientName, title, venue, date, security, guests);
+                ev.setVendorStatus(VENDOR_STATUS_MAP.getOrDefault(id, "Pending Vendor Acceptance"));
+                ev.setAssignedVendor(VENDOR_ASSIGNEE_MAP.getOrDefault(id, ""));
+                events.add(ev);
             }
         } catch (SQLException e) {
             System.err.println("[EventDAO Error] Failed to fetch joined events: " + e.getMessage());
@@ -273,16 +367,16 @@ public class EventDAO {
         }
     }
 
-    // CREATE NEW CLIENT (Returns generated client_id, or -1 on failure)
+    // CREATE NEW CLIENT
     public int insertClient(String fullName, String membershipTier, String encryptedContact) {
         if (fullName == null || fullName.isBlank() || encryptedContact == null || encryptedContact.isBlank()) {
             return -1;
         }
         Connection conn = DatabaseConnection.getConnection();
         if (conn == null) {
-            int nextId = NEXT_CLIENT_ID.getAndIncrement();
-            fallbackClients.add(new String[]{String.valueOf(nextId), fullName.trim(), membershipTier.trim(), encryptedContact.trim()});
-            return nextId;
+            String nextId = String.valueOf(nextClientId.getAndIncrement());
+            fallbackClients.add(new String[]{nextId, fullName.trim(), membershipTier.trim(), encryptedContact.trim()});
+            return Integer.parseInt(nextId);
         }
         String sql = "INSERT INTO clients (full_name, membership_tier, encrypted_contact) VALUES (?, ?, ?)";
         try (PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -293,7 +387,7 @@ public class EventDAO {
                 try (ResultSet keys = stmt.getGeneratedKeys()) {
                     if (keys.next()) return keys.getInt(1);
                 }
-                return NEXT_CLIENT_ID.getAndIncrement();
+                return nextClientId.getAndIncrement();
             }
             return -1;
         } catch (SQLException e) {
@@ -302,16 +396,16 @@ public class EventDAO {
         }
     }
 
-    // CREATE NEW VENDOR (Returns generated vendor_id, or -1 on failure)
+    // CREATE NEW VENDOR
     public int insertVendor(String vendorName, String specialty, String clearance) {
         if (vendorName == null || vendorName.isBlank() || !Event.isValidClearance(clearance)) {
             return -1;
         }
         Connection conn = DatabaseConnection.getConnection();
         if (conn == null) {
-            int nextId = NEXT_VENDOR_ID.getAndIncrement();
-            fallbackVendors.add(new String[]{String.valueOf(nextId), vendorName.trim(), specialty.trim(), clearance.trim()});
-            return nextId;
+            String nextId = String.valueOf(nextVendorId.getAndIncrement());
+            fallbackVendors.add(new String[]{nextId, vendorName.trim(), specialty.trim(), clearance.trim()});
+            return Integer.parseInt(nextId);
         }
         String sql = "INSERT INTO elite_vendors (vendor_name, specialty, security_clearance) VALUES (?, ?, ?)";
         try (PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -322,7 +416,7 @@ public class EventDAO {
                 try (ResultSet keys = stmt.getGeneratedKeys()) {
                     if (keys.next()) return keys.getInt(1);
                 }
-                return NEXT_VENDOR_ID.getAndIncrement();
+                return nextVendorId.getAndIncrement();
             }
             return -1;
         } catch (SQLException e) {
