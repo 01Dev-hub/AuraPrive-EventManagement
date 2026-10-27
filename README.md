@@ -58,12 +58,15 @@ AuraPrive-EventManagement/
 │
 ├── database/
 │   └── javapro.sql                              # Relational MariaDB schema & Indian seed records
-│
 ├── docs/
-│   ├── landing.png                              # Client portal preview
-│   ├── dashboard.png                            # Concierge terminal preview
-│   └── database_check.png                       # Terminal JDBC database verification view
-│
+│   ├── account_create.png                      # Unified login & account creation gate preview
+│   ├── client_view.png                         # Private client sanctuary & live telemetry preview
+│   ├── dashboard.png                           # Concierge terminal preview
+│   ├── database_check.png                      # Terminal JDBC database verification view
+│   ├── landing.png                             # Client-facing bespoke landing portal preview
+│   ├── terminal_run_test.png                   # Standalone CLI rubric verifier output
+│   └── vendor_view.png                         # Syndicate vendor logistics dispatch preview
+|
 ├── lib/
 │   └── mysql-connector-j-8.3.0.jar              # MySQL/MariaDB JDBC connector library
 │
